@@ -48,6 +48,13 @@ class BatchAudioTests(unittest.TestCase):
             self.assertEqual(p.read_bytes(), before)
             self.assertTrue((out / "hit.wav").exists())
 
+    def test_output_tree_inside_source_is_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            write_wav(root / "a.wav", np.ones(100) * 0.2)
+            with self.assertRaises(ValueError):
+                batch_audio.onsetpack(root, root / "processed")
+
     def test_phasebatch_detects_delay_and_polarity(self):
         with tempfile.TemporaryDirectory() as td:
             td = Path(td)
@@ -63,6 +70,26 @@ class BatchAudioTests(unittest.TestCase):
             self.assertEqual(r["delay_frames"], 12)
             self.assertTrue(r["polarity_inverted"])
             self.assertLess(r["correlation"], -0.95)
+
+    def test_phase_silence_prefers_zero_delay(self):
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            a, b = td / "a.wav", td / "b.wav"
+            write_wav(a, np.zeros(1000))
+            write_wav(b, np.zeros(1000))
+            r = batch_audio.compare_phase(a, b, max_shift_ms=5)
+            self.assertEqual(r["delay_frames"], 0)
+            self.assertEqual(r["correlation"], 0.0)
+
+    def test_correct_and_repair_require_output_dir_upfront(self):
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            write_wav(td / "ref.wav", np.zeros(1000))
+            write_wav(td / "b.wav", np.zeros(1000))
+            with self.assertRaises(ValueError):
+                batch_audio.phasebatch(td, "ref.wav", correct=True)
+            with self.assertRaises(ValueError):
+                batch_audio.edgeguard(td, repair=True)
 
     def test_packdelta_detects_rename_modify_add_remove_and_duplicates(self):
         with tempfile.TemporaryDirectory() as td:
@@ -113,6 +140,13 @@ class BatchAudioTests(unittest.TestCase):
             write_wav(out, np.zeros(100))
             with self.assertRaises(FileExistsError):
                 batch_audio.repair_edges(p, out, fade_ms=2)
+
+    def test_report_refuses_overwrite_without_flag(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "report.json"
+            p.write_text("old", encoding="utf-8")
+            with self.assertRaises(FileExistsError):
+                batch_audio.write_report({"files": []}, p, overwrite=False)
 
     def test_scan_is_recursive_and_case_insensitive(self):
         with tempfile.TemporaryDirectory() as td:
