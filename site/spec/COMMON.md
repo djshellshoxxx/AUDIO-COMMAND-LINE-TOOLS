@@ -1,0 +1,11 @@
+# Shared implementation contract
+
+Python 3.10+ and NumPy 1.24+; JavaScript Node 20+ or a modern browser. No network processing. Python and JavaScript implementations are independent ports with matching flag names and algorithms. Shell scripts are launchers only.
+
+Inputs: little-endian RIFF WAVE, PCM integer 8/16/24/32 or IEEE float 32/64; 1–32 channels; sample rates 1–384000 Hz; maximum 64 MiB per file. Reject empty audio, nonfinite float samples, wrong RIFF length, truncated/duplicate chunks, wrong alignment, unsupported compressed formats and WAVE_FORMAT_EXTENSIBLE. Ancillary chunks are skipped; source files are never rewritten. Data is held in memory, so use short clips or split long files.
+
+Output reports use JSON with finite numbers and a -240 dB silence floor. Optional WAV exports are symmetric rounded signed 16-bit PCM without source metadata. Quantization is sign(sample)*floor(abs(sample)*32767+0.5). Above-full-scale exports are rejected rather than clipped. No dithering, true-peak or LUFS claims. Exit codes: 0 analysis complete, 1 failed stem contract, 2 input/options/I/O error. Other tools report measurements without assigning universal pass/fail. Output paths cannot match inputs or each other. Existing outputs require --overwrite; no in-place processing.
+
+Flags use hyphenated names. All numeric options must be finite. Counts must be integers; window, BPM, meter, bars, durations for context/minimum gaps and run lengths must be positive. Padding, source format contract values and cue offsets must be nonnegative. A zero stem rate/channel/frame contract inherits that field from the first file. Threshold dB ranges -240..0; requested gain ranges -120..120; ceiling ranges -120..0. Cue grids are capped at 100000 entries.
+
+No ports rely on Python except the explicitly labeled shell launchers. Browser algorithms use the same JavaScript engine as Node and preserve original WAV rate/frame counts. Browser upload fields never send files to a server. Download reports and available processed WAVs; playback is optional, never autoplay.
