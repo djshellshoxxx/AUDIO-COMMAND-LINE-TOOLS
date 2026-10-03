@@ -10,7 +10,7 @@ python python/edgeguard.py INPUT_DIR [--threshold-db -45] [--repair --fade-ms 5 
 
 For each WAV, the tool measures the first/last sample peak magnitude plus the first/last sample-to-sample slope. An edge is flagged when either measurement reaches the amplitude represented by `--threshold-db`.
 
-With `--repair`, only flagged files receive a linear fade-in and fade-out of `--fade-ms` and are written beneath the separate output tree. Sources are never changed. Existing output files fail unless `--overwrite` is explicit.
+With `--repair`, only flagged files receive a linear fade-in and fade-out of `--fade-ms` and are written beneath the separate output tree. Repair fade duration must be finite and greater than zero. Sources are never changed. Existing output files fail unless `--overwrite` is explicit. Output paths that resolve through symlinks outside the selected output tree, or back into the source tree, are rejected.
 
 ## Output
 
