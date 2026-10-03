@@ -58,7 +58,7 @@ class BashAuditRegressionTest(unittest.TestCase):
         p=self.p/'nonadjacent.wav'
         self.ff('-f','lavfi','-i','sine=frequency=731:sample_rate=48000:duration=.6',
                 '-f','lavfi','-i','sine=frequency=997:sample_rate=48000:duration=.3',
-                '-filter_complex','[0:a][1:a][0:a]concat=n=3:v=0:a=1[out]','-map','[out]',p)
+                '-filter_complex','[0:a]asplit=2[a][c];[a][1:a][c]concat=n=3:v=0:a=1[out]','-map','[out]',p)
         r=self.run('repeataudit',p,'--format','jsonl','--block-ms','100','--min-adjacent-ms','1000','--min-nonadjacent-ms','500')
         self.assertEqual(r.returncode,1,r.stderr)
         self.assertIn('nonadjacent_exact_repeat',self.events(r))
