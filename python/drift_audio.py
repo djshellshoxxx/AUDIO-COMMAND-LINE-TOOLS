@@ -262,7 +262,9 @@ def main(argv=None, fixed_tool=None):
         if tool=='renderdelta' and len(args.input)!=2: raise ValueError('renderdelta takes two input files')
         inputs={Path(p).resolve() for p in args.input}
         outputs=[Path(p).resolve() for p in (args.output,getattr(args,'audio_out',None)) if p]
-        if len(set(outputs))!=len(outputs) or any(p in inputs for p in outputs):
+        same_input=any(p.exists() and source.exists() and p.samefile(source) for p in outputs for source in inputs)
+        same_output=any(p.exists() and q.exists() and p.samefile(q) for i,p in enumerate(outputs) for q in outputs[i+1:])
+        if len(set(outputs))!=len(outputs) or any(p in inputs for p in outputs) or same_input or same_output:
             raise ValueError('Output paths must be distinct and cannot replace inputs')
         if not args.overwrite and any(p.exists() for p in outputs): raise ValueError('Output exists; choose a new path or --overwrite')
         names=[Path(p).name for p in args.input]

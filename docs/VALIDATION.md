@@ -1,6 +1,6 @@
 # Validation
 
-The regression suite has 40 tests with additional subcases. Fixtures are generated from known sample values; no copyrighted audio or external files are required.
+The regression suite has 41 tests with additional subcases. Fixtures are generated from known sample values; no copyrighted audio or external files are required.
 
 ## Engine checks
 
@@ -16,7 +16,7 @@ The regression suite has 40 tests with additional subcases. Fixtures are generat
 - Identical renders, changed sections, positive/negative sample offsets, unmatched frames, incompatible formats, and no overlap.
 - Python/JavaScript report agreement for all ten tools and custom flags.
 - Byte-identical PCM exports for all five export tools.
-- Report paths, overwrite flags, input protection, help text, missing paths, unknown flags, nonfinite and pathological numeric flags.
+- Report paths, overwrite flags, input protection (including hard links), help text, missing paths, unknown flags, nonfinite and pathological numeric flags.
 - PCM 8/16/24/32, float 32/64, extensible PCM/float, ancillary chunks, truncated headers, invalid format metadata, nonfinite/extreme samples.
 - Unified entry points, equals-form flags, Bash launcher, and Windows PowerShell/batch launchers with spaces in input paths.
 

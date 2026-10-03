@@ -26,7 +26,8 @@ export function main(argv=process.argv.slice(2),fixedTool=null) {
       else {if(!value.trim())throw Error('Empty flag value');o[key]=Number(value);}
     }
     const paths=[output,audioOut].filter(Boolean).map(p=>path.resolve(p)),sources=inputs.map(p=>path.resolve(p));
-    if(new Set(paths).size!==paths.length || paths.some(p=>sources.includes(p)))throw Error('Output paths must be distinct and cannot replace inputs');
+    const sameFile=(a,b)=>{if(!fs.existsSync(a)||!fs.existsSync(b))return false;const sa=fs.statSync(a,{bigint:true}),sb=fs.statSync(b,{bigint:true});return sa.dev===sb.dev && sa.ino===sb.ino;};
+    if(new Set(paths).size!==paths.length || paths.some(p=>sources.includes(p)||sources.some(s=>sameFile(p,s))) || paths.some((p,i)=>paths.slice(i+1).some(q=>sameFile(p,q))))throw Error('Output paths must be distinct and cannot replace inputs');
     if(!overwrite && paths.some(p=>fs.existsSync(p)))throw Error('Output exists; choose a new path or --overwrite');
     const audio=inputs.map(p=>{if(fs.statSync(p).size>64*1024*1024)throw Error('WAV exceeds 64 MiB limit');const b=fs.readFileSync(p);return decodeWav(b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength));});
     const names=inputs.map(p=>path.basename(p));const {report,rendered}=analyze(tool,audio,o,names);report.inputs=names;

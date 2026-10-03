@@ -156,6 +156,12 @@ class ToolsTest(unittest.TestCase):
             self.assertEqual(self.cli('gainbudget',self.p/'a.wav','--output',report,'--overwrite',js=js).returncode,0)
             self.assertEqual(self.cli('gainbudget',self.p/'a.wav','--output',self.p/'a.wav','--overwrite',js=js).returncode,2)
             self.assertEqual(self.cli('gainbudget',self.p/'a.wav','--audio-out',report,'--output',report,js=js).returncode,2)
+    def test_hardlink_input_protection(self):
+        import os
+        link=self.p/'linked.wav';os.link(self.p/'a.wav',link);original=link.read_bytes()
+        for js in (False,True):
+            self.assertEqual(self.cli('gainbudget',self.p/'a.wav','--output',link,'--overwrite',js=js).returncode,2)
+            self.assertEqual(link.read_bytes(),original)
     def test_cli_invalid_options_both(self):
         for js in (False,True):
             for tool,flag,value in [('loopbudget','--bpm','0'),('cueclock','--beats','2.5'),('tailbudget','--pad-ms','-1'),('dcjourney','--window-ms','0'),('gainbudget','--gain-db','nan'),('railruns','--threshold-db','5')]:
