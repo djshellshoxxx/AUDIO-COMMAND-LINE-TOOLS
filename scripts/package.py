@@ -17,8 +17,9 @@ def main():
     common=[(ROOT/'LICENSE','LICENSE'),(ROOT/'README.md','README.md')]+[(p,'spec/'+p.name) for p in (ROOT/'spec').glob('*.md')]
     bundle('cdl-audio-python.zip',common+[(ROOT/'requirements.txt','requirements.txt')]+[(p,p.name) for p in (ROOT/'python').iterdir() if p.is_file()])
     bundle('cdl-audio-javascript.zip',common+[(p,p.name) for p in (ROOT/'site/js').glob('*.mjs')])
-    bundle('cdl-audio-bash.zip',common+[(p,p.relative_to(ROOT).as_posix()) for p in (ROOT/'bash').rglob('*') if p.is_file()])
-    bundle('cdl-audio-powershell.zip',common+[(p,p.relative_to(ROOT).as_posix()) for p in (ROOT/'powershell').rglob('*') if p.is_file()])
+    powershell=ROOT/'powershell'
+    if powershell.exists():
+        bundle('cdl-winaudioforensics-powershell.zip',common+[(p,p.name) for p in powershell.iterdir() if p.is_file()])
     for folder in ('spec','docs'):
         target=ROOT/'site'/folder
         target.mkdir(exist_ok=True)
