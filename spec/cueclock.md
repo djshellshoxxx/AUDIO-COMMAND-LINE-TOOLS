@@ -29,7 +29,8 @@ step_seconds = 60 / bpm * beats * every_bars
 For each ideal time offset + index*step before end of audio
 frame = round_half_up(ideal_time * rate)
 If frame < total_frames, emit frame, rounded time, musical bar and error_ms
-Limit grid to 100000 entries
+Limit emitted grid to 100000 entries after accounting for origin and rounded endpoint
+An origin at or beyond the end returns an empty grid
 Serialize JSON report with finite numbers
 Write optional audio result to a new path
 Write report or print to stdout

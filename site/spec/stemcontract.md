@@ -7,8 +7,8 @@ Check exported files against an explicit rate, channel, length and filename cont
 ## Interface
 
 ```sh
-python python/stemcontract.py input.wav --rate 48000 --channels 2 --frames 96000 --require-active --expect drums.wav --expect bass.wav
-node site/js/stemcontract.mjs input.wav --rate 48000 --channels 2 --frames 96000 --require-active --expect drums.wav --expect bass.wav
+python python/stemcontract.py drums.wav bass.wav --rate 48000 --channels 2 --frames 96000 --require-active --expect drums.wav --expect bass.wav
+node site/js/stemcontract.mjs drums.wav bass.wav --rate 48000 --channels 2 --frames 96000 --require-active --expect drums.wav --expect bass.wav
 ```
 
 For stemcontract pass all stems; for renderdelta pass A.wav B.wav. Every command supports `--output report.json` / `-o`, `--overwrite`, and `--help`. Reports go to stdout by default. No audio mutation.

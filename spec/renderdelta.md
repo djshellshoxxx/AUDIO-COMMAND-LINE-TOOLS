@@ -7,8 +7,8 @@ Compare two renders at a supplied sample offset and report changed sections.
 ## Interface
 
 ```sh
-python python/renderdelta.py input.wav --offset-frames 0 --window-ms 100 --threshold-db -80 --audio-out residual.wav
-node site/js/renderdelta.mjs input.wav --offset-frames 0 --window-ms 100 --threshold-db -80 --audio-out residual.wav
+python python/renderdelta.py A.wav B.wav --offset-frames 0 --window-ms 100 --threshold-db -80 --audio-out residual.wav
+node site/js/renderdelta.mjs A.wav B.wav --offset-frames 0 --window-ms 100 --threshold-db -80 --audio-out residual.wav
 ```
 
 For stemcontract pass all stems; for renderdelta pass A.wav B.wav. Every command supports `--output report.json` / `-o`, `--overwrite`, and `--help`. Reports go to stdout by default. Also supports --audio-out result.wav.

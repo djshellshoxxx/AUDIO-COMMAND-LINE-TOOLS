@@ -24,10 +24,12 @@ For stemcontract pass all stems; for renderdelta pass A.wav B.wav. Every command
 Validate options, input count and output paths
 Read and validate source RIFF WAV without resampling
 Measure per-channel sample peaks and RMS
-safe_gain = ceiling_db - peak_db (null for digital silence)
+safe_gain = ceiling_db - 20*log10(actual_peak) (null for digital silence)
+Use the actual nonzero peak even below the report display floor
 Predict peak after multiplying by 10^(gain_db/20)
 Report whether requested gain fits ceiling
 Only export if requested gain fits the ceiling
+Bound rounded PCM integers to floor(10^(ceiling_db/20)*32768)
 Serialize JSON report with finite numbers
 Write optional audio result to a new path
 Write report or print to stdout
@@ -39,7 +41,7 @@ Reports include tool, sample_rate, frames, channels, duration_seconds and input 
 
 ## Limits
 
-Sample peak only, not true peak or LUFS. No limiter. No guarantee against intersample peaks. Export is 16-bit.
+Sample peak only, not true peak or LUFS. No limiter. No guarantee against intersample peaks. Export is 16-bit; PCM rounding is bounded by the requested ceiling, and ceilings below one PCM step can yield silence.
 
 ## Acceptance
 

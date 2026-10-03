@@ -45,3 +45,5 @@ Requires stereo. Loss is measured against average channel energy. Silent windows
 ## Acceptance
 
 Synthetic audio with known faults must produce known locations or numeric results. Python and JavaScript reports must agree within floating-point tolerance. Invalid inputs, malformed WAV, nonfinite flags and accidental overwrites must fail. Optional audio output must decode with the specified sample rate, channel count and expected frame count. Tool-specific tests live in tests/test_tools.py.
+
+Correlation is null for constant channels, including nonzero constants, because centered variance is zero. Finite correlation is bounded to [-1, 1].

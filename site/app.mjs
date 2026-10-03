@@ -1,4 +1,4 @@
-import {options as resolveOptions,flags,encodeWav} from './js/engine.mjs';
+import {options as resolveOptions,flags,checkInputCount,encodeWav} from './js/engine.mjs';
 const $=id=>document.getElementById(id);
 const hints={threshold_db:['Threshold (dBFS)','Sample amplitude; zero is full scale.'],window_ms:['Window (ms)','Nonoverlapping analysis windows.'],bpm:['Tempo (BPM)','Quarter-note tempo supplied by you.'],beats:['Beats per bar','Quarter-note beats in each bar.'],bars:['Loop length (bars)','Expected number of complete bars.'],pad_ms:['Keep after activity (ms)','Keep this much existing quiet audio.'],loss_db:['Mono loss limit (dB)','Report loss greater than this amount.'],min_ms:['Minimum gap (ms)','Ignore shorter quiet runs.'],flank_ms:['Context length (ms)','RMS before and after each gap.'],active_db:['Active flank (dBFS)','Both neighboring regions must reach this RMS.'],min_run:['Minimum run (samples)','Consecutive threshold hits per channel.'],gain_db:['Requested gain (dB)','Gain to predict or apply.'],ceiling_db:['Sample peak ceiling (dBFS)','Maximum permitted peak for gain exports.'],rate:['Required rate (Hz)','0 uses the first file’s sample rate.'],channels:['Required channels','0 uses the first file’s channel count.'],frames:['Required frames','0 uses the first file’s frame count.'],require_active:['Require active audio','Reject stems entirely below threshold.'],expect:['Expected filenames','One exact basename per line; extras allowed.'],every_bars:['Cue spacing (bars)','Place a cue every N bars.'],offset_seconds:['Grid origin (seconds)','Bar 1 starts here.'],offset_frames:['B offset (samples)','Positive skips B; negative skips A.']};
 let catalog=[],selected=null,demoFiles=[],worker=null,urls=[],revision=0;
@@ -48,6 +48,7 @@ $('analyze-form').addEventListener('submit',async e=>{
   e.preventDefault();invalidate();const current=revision,files=demoFiles.length?demoFiles:Array.from($('files').files);
   try{
     if(!files.length)throw Error('Choose a WAV file or load the test recording.');
+    checkInputCount(selected.name,files.length);
     if(files.reduce((n,f)=>n+f.size,0)>64*1024*1024)throw Error('Selected files exceed the 64 MiB browser total.');
     const o=resolveOptions(selected.name,userOptions());$('run').disabled=true;status('Reading WAV files…');
     const buffers=await Promise.all(files.map(f=>f.arrayBuffer()));if(current!==revision)return;
@@ -57,4 +58,4 @@ $('analyze-form').addEventListener('submit',async e=>{
   }catch(error){if(current===revision){$('run').disabled=false;status(error.message,true);}}
 });
 window.addEventListener('hashchange',()=>{const name=location.hash.slice(1);if(catalog.some(t=>t.name===name))select(name,false);});
-try{const response=await fetch('catalog.json');if(!response.ok)throw Error('Tool catalog unavailable.');catalog=await response.json();for(const [i,item] of catalog.entries()){const button=document.createElement('button');button.type='button';button.dataset.tool=item.name;const number=document.createElement('span');number.textContent=String(i+1).padStart(2,'0');button.append(number,document.createTextNode(item.name));button.addEventListener('click',()=>select(item.name));$('tool-list').append(button);}select(location.hash.slice(1),false);}catch(e){status(e.message,true);$('run').disabled=true;}
+try{const response=await fetch('catalog.json');if(!response.ok)throw Error('Tool catalog unavailable.');catalog=await response.json();for(const [i,item] of catalog.entries()){const button=document.createElement('button');button.type='button';button.dataset.tool=item.name;const number=document.createElement('span');number.textContent=String(i+1).padStart(2,'0');button.append(number,document.createTextNode(item.name));button.addEventListener('click',()=>select(item.name));$('tool-list').append(button);}select(location.hash.slice(1),false);$('demo').disabled=false;$('files').disabled=false;}catch(e){status(e.message,true);$('run').disabled=true;}

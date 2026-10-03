@@ -1,9 +1,10 @@
 # Validation
 
-The regression suite has 41 tests with additional subcases. Fixtures are generated from known sample values; no copyrighted audio or external files are required.
+The regression suite has 68 tests with additional subcases. Fixtures are generated from known sample values; no copyrighted audio or external files are required.
 
 ## Engine checks
 
+- Audit regressions: empty/missing flag values, strict decimal tokens, option terminators, Unicode basename ordering, symlink parent aliases, output-parent preflight, aggregate input limits, report limits, constant correlation, sub-floor gain budgets, quantized ceilings, cue origins, cross-chunk runs, quiet flank precision, active threshold bounds, and malformed fmt extensions.
 - Musical frame counts, seam jumps, and single-frame loops.
 - Last activity, per-channel activity, quiet tails, retained padding, and all-quiet input.
 - Stereo polarity inversion, identical channels, silence, and non-stereo rejection.
@@ -24,7 +25,7 @@ Run: `python -m unittest discover -s tests -v`. GitHub Actions runs it on Ubuntu
 
 ## Browser checks
 
-`tests/browser.cjs` uses Playwright/Chromium. It exercises all ten tools through the workbench with synthetic audio, JSON downloads, processed WAV downloads, real file uploads, malformed files, missing files, ceiling enforcement, stale-result reset, bundle downloads, specification links, skip-link keyboard navigation, and page overflow at 320/768/1024/1440 px. Browser page errors fail the test. The workflow records a full-page screenshot as the `browser-preview` artifact.
+`tests/browser.cjs` uses Playwright/Chromium. It exercises all ten tools through the workbench with synthetic audio, JSON downloads, processed WAV downloads, real file uploads, malformed files, missing files, ceiling enforcement before export and after PCM rounding, catalog-load failure controls, stale-result reset, bundle downloads, specification links, skip-link keyboard navigation, and page overflow at 320/768/1024/1440 px. Browser page errors fail the test. The workflow records a full-page screenshot as the `browser-preview` artifact.
 
 The browser, CLI, and Python suite cover deterministic processing. Listening quality remains a user judgement: thresholds do not establish a fault, sample peaks are not true peaks, and the suite does not claim hardware audio-device or DAW integration testing.
 

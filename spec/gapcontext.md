@@ -46,3 +46,5 @@ Candidates can be musical rests. No automatic deletion, interpolation or diagnos
 ## Acceptance
 
 Synthetic audio with known faults must produce known locations or numeric results. Python and JavaScript reports must agree within floating-point tolerance. Invalid inputs, malformed WAV, nonfinite flags and accidental overwrites must fail. Optional audio output must decode with the specified sample rate, channel count and expected frame count. Tool-specific tests live in tests/test_tools.py.
+
+Active flank thresholds must be within -240..0 dBFS. Context RMS uses cumulative mean-square energy, with direct summation when subtraction would lose a very quiet flank after loud audio.
