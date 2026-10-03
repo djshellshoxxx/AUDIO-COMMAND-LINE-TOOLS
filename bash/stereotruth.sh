@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+BASE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); source "$BASE/lib/common.sh"; source "$BASE/lib/ffmpeg.sh"
+help(){ cat <<'EOF'
+stereotruth BETA - detect dual-mono, polarity and imbalance candidates
+Usage: stereotruth.sh INPUT [--dual-mono-correlation X] [--negative-correlation X] [--imbalance-db DB] [--delay-search-ms MS] [--json] [--output PATH]
+EOF
+}
+json=0; dual=0.995; neg=-0.90; imb=3; delay=3; output=""; input=""; window=100; minactive=-70
+while (($#)); do case "$1" in --help|-h) help; exit 0;; --json) json=1;; --dual-mono-correlation) shift; dual=${1-};; --negative-correlation) shift; neg=${1-};; --imbalance-db) shift; imb=${1-};; --delay-search-ms) shift; delay=${1-};; --window-ms) shift; window=${1-};; --min-active-db) shift; minactive=${1-};; --output) shift; output=${1-};; --*) die "unknown option: $1";; *) [[ -z "$input" ]]||die 'one input only'; input=$1;; esac; shift; done
+[[ -n "$input" ]]||die 'input required'; require_tools; need_file "$input"; ch=$(probe_value "$input" channels); [[ "$ch" == 2 ]]||die 'stereotruth requires exactly two decoded channels'
+raw=$(phase_metadata "$input" || true); vals=(); while IFS= read -r l; do [[ $l =~ lavfi\.aphasemeter\.phase=([-0-9.]+) ]]&&vals+=("${BASH_REMATCH[1]}"); done <<< "$raw"
+count=${#vals[@]}; dualn=0; negn=0; sum=0; if ((count)); then for p in "${vals[@]}"; do awk -v p="$p" -v d="$dual" 'BEGIN{exit !(p>=d)}'&&dualn=$((dualn+1))||true; awk -v p="$p" -v n="$neg" 'BEGIN{exit !(p<=n)}'&&negn=$((negn+1))||true; sum=$(awk -v a="$sum" -v b="$p" 'BEGIN{printf "%.9f",a+b}'); done; avg=$(awk -v s="$sum" -v n="$count" 'BEGIN{printf "%.6f",s/n}'); dp=$(awk -v a="$dualn" -v n="$count" 'BEGIN{printf "%.6f",a/n}'); np=$(awk -v a="$negn" -v n="$count" 'BEGIN{printf "%.6f",a/n}'); else avg=0; dp=0; np=0; fi
+stats=$(LC_ALL=C ffmpeg -hide_banner -loglevel error -i "$input" -af "astats=metadata=1:reset=0,ametadata=print:file=-" -f null - 2>/dev/null || true)
+lr=$(printf '%s\n' "$stats"|awk -F= '/lavfi.astats.1.RMS_level=/{print $2;exit}'); rr=$(printf '%s\n' "$stats"|awk -F= '/lavfi.astats.2.RMS_level=/{print $2;exit}'); bal=0; if [[ $lr =~ ^-?[0-9] && $rr =~ ^-?[0-9] ]]; then bal=$(awk -v a="$lr" -v b="$rr" 'BEGIN{x=a-b;if(x<0)x=-x;printf "%.6f",x}'); fi
+findings='['; ff=1; nf=0; add(){ item="{\"category\":$(json_string "$1"),\"message\":$(json_string "$2")}"; [[ $ff -eq 1 ]]||findings+=','; findings+="$item"; ff=0; nf=$((nf+1)); }
+awk -v p="$dp" 'BEGIN{exit !(p>=.9)}'&&add dual_mono_candidate "$(printf '%.1f' "$(awk -v p="$dp" 'BEGIN{print p*100}')")% of measured phase windows meet dual-mono threshold"||true
+awk -v p="$np" 'BEGIN{exit !(p>=.5)}'&&add polarity_inversion_candidate "sustained strongly negative correlation observed"||true
+awk -v b="$bal" -v i="$imb" 'BEGIN{exit !(b>=i)}'&&add channel_imbalance "RMS balance difference ${bal} dB exceeds ${imb} dB"||true
+findings+=']'; status=$(status_from_count "$nf")
+report="{\"tool\":\"stereotruth\",\"version\":\"$CDL_VERSION\",\"generated_utc\":$(json_string "$(now_utc)"),\"inputs\":[$(json_string "$input")],\"dependencies\":{\"ffmpeg\":$(json_string "$(ffmpeg_version)"),\"ffprobe\":$(json_string "$(ffprobe_version)")},\"options\":{\"window_ms\":$(json_num "$window"),\"dual_mono_correlation\":$(json_num "$dual"),\"negative_correlation\":$(json_num "$neg"),\"imbalance_db\":$(json_num "$imb"),\"delay_search_ms\":$(json_num "$delay"),\"min_active_db\":$(json_num "$minactive")},\"measurements\":{\"window_count\":$count,\"mean_correlation\":$(json_num "$avg"),\"dual_mono_window_ratio\":$(json_num "$dp"),\"negative_window_ratio\":$(json_num "$np"),\"left_rms_db\":$(json_num "$lr"),\"right_rms_db\":$(json_num "$rr"),\"rms_balance_db\":$(json_num "$bal")},\"findings\":$findings,\"status\":\"$status\"}"
+((json))&&write_or_stdout "$output" "$report"||write_or_stdout "$output" "stereotruth BETA: mean_corr=$avg balance_db=$bal status=$status"
+((nf>0))&&exit 1||exit 0
