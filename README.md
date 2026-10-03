@@ -1,6 +1,6 @@
 # Audio Command Line Tools
 
-Fourteen focused audio utilities from **Circuit Drift Labs**. The original ten tools analyze individual WAV files in Python, Node, or the browser. Four newer tools process complete folders and asset trees from the command line.
+Fifteen beta-stage audio utilities from **Circuit Drift Labs**. Ten tools analyze individual WAV files in Python, Node, or the browser, four process complete folders and asset trees, and **WinAudioForensics** is a Windows-native PowerShell troubleshooting tool for capturing and comparing system audio state.
 
 > **BETA:** Every tool in this repository and on the GitHub Pages workbench is currently beta-stage software. Keep source audio backed up and review generated reports/outputs before using them in production workflows.
 
@@ -32,31 +32,44 @@ Fourteen focused audio utilities from **Circuit Drift Labs**. The original ten t
 
 The batch tools are aimed at operations that become tedious or error-prone when repeated over hundreds or thousands of files. They are deliberately report-first: analysis is read-only and transformed audio is written to a different output tree.
 
+## WinAudioForensics: native PowerShell
+
+[WinAudioForensics](spec/winaudioforensics.md) is a Windows-only, PowerShell 7+ audio-state forensics CLI. It is read-only with respect to Windows audio configuration and uses CIM/PnP, signed-driver metadata, services, MMDevices registry state, Windows event logs, and documented Core Audio enumeration to answer a different question from the WAV tools: **what changed between a working audio state and a broken one?**
+
+```powershell
+.\powershell\WinAudioForensics.ps1 snapshot -Output working.json
+# reproduce an audio-routing/device problem
+.\powershell\WinAudioForensics.ps1 snapshot -IncludeEvents -EventHours 4 -Output broken.json
+.\powershell\WinAudioForensics.ps1 diff -Before working.json -After broken.json -Output change.json
+.\powershell\WinAudioForensics.ps1 doctor -Snapshot broken.json -Diff change.json
+```
+
+For intermittent problems:
+
+```powershell
+.\powershell\WinAudioForensics.ps1 watch -OutputDirectory .\audio-watch -IntervalSeconds 5
+```
+
+See the [usage guide](docs/WINAUDIOFORENSICS.md) and [research/demand check](docs/WINAUDIOFORENSICS_RESEARCH.md).
+
 ## Install
 
-Python 3.10+ and NumPy:
+Python 3.10+ and NumPy for the Python audio tools:
 
 ```sh
 python -m pip install -r requirements.txt
 ```
 
-The original ten Python entry points use the shared `python/drift_audio.py` engine. The four batch tools use `python/batch_audio.py`.
+The original ten Python entry points use the shared `python/drift_audio.py` engine. The four batch tools use `python/batch_audio.py`. WinAudioForensics has no external PowerShell module dependency.
 
 ## Batch examples
 
 ```sh
-# Standardize drum/sample pre-roll while preserving the source tree
 python python/onsetpack.py ./samples --threshold-db -24 --preroll-ms 12 \
   --output-dir ./samples-onset --output onset-report.json --csv onset-report.csv
-
-# Compare synchronized mic files to kick-in.wav and optionally write aligned copies
 python python/phasebatch.py ./multimic --reference kick-in.wav --max-shift-ms 8 \
   --correct --output-dir ./multimic-aligned --output phase-report.json
-
-# Compare two versions of a sample pack by decoded audio content
 python python/packdelta.py ./pack-v1 ./pack-v2 --output pack-delta.json
-
-# Find risky sample boundaries; repair flagged copies with 4 ms fades
 python python/edgeguard.py ./oneshots --threshold-db -42 --repair --fade-ms 4 \
   --output-dir ./oneshots-edge-fixed --output edge-report.json --csv edge-report.csv
 ```
@@ -85,19 +98,19 @@ node site/js/renderdelta.mjs A.wav B.wav --window-ms 50 --output changes.json
 node site/js/cli.mjs gainbudget mix.wav --gain-db 2 --ceiling-db -1 --audio-out gained.wav
 ```
 
-The four folder-scale batch tools are currently Python CLI tools. They are featured on the Pages site, but they are not executed in-browser because large recursive directory workflows and browser filesystem permissions vary significantly across platforms.
+The four folder-scale batch tools and WinAudioForensics are featured on Pages but do not execute in the browser.
 
 ## Formats and safety
 
 The original ten tools support little-endian RIFF WAV PCM 8/16/24/32-bit and IEEE float 32/64-bit, 1–32 channels, 1–384000 Hz, with the documented size limits in [COMMON](spec/COMMON.md). The batch tools currently support uncompressed PCM WAV 8/16/24/32-bit and write transformed audio as 16-bit PCM WAV.
 
-MP3, FLAC, and compressed WAV are rejected by the native engines. Convert externally when needed, for example:
+MP3, FLAC, and compressed WAV are rejected by the native audio engines. Convert externally when needed, for example:
 
 ```sh
 ffmpeg -i input.flac -c:a pcm_s24le input.wav
 ```
 
-Measurements are evidence to inspect, not automatic diagnoses. Sample peaks are not true peaks or LUFS. Phasebatch performs integer-sample time-domain correlation rather than fractional/frequency-dependent phase correction. Edgeguard repairs file boundaries only. Packdelta performs exact decoded-content comparison rather than perceptual fingerprinting.
+Measurements and WinAudioForensics findings are evidence to inspect, not automatic diagnoses. WinAudioForensics reports correlation/state change rather than claiming causality.
 
 ## Verify and build
 
@@ -107,6 +120,12 @@ python scripts/package.py
 python -m http.server 8000 --directory site
 ```
 
-Then open `http://localhost:8000`. GitHub Actions runs the native Python/Node parity suite across Linux, Windows, and macOS plus browser workbench tests before Pages deployment.
+On Windows with PowerShell 7+:
+
+```powershell
+.\tests\winaudioforensics.tests.ps1
+```
+
+GitHub Actions runs the Python/Node suite across Linux, Windows, and macOS, WinAudioForensics tests and a live snapshot smoke test on Windows, packaging checks, and browser workbench tests before Pages deployment.
 
 License: MIT. Research links document overlap and alternatives; no third-party source code or audio is copied.
