@@ -32,6 +32,33 @@ jobs:
         shell: pwsh
         run: ./tests/winaudioforensics.tests.ps1
       - run: python scripts/package.py
+  shell-native:
+    name: Shell-native QC / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install FFmpeg on Ubuntu
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install FFmpeg on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install ffmpeg -y --no-progress
+      - name: Verify dependencies
+        shell: pwsh
+        run: |
+          ffmpeg -version | Select-Object -First 1
+          ffprobe -version | Select-Object -First 1
+          $PSVersionTable.PSVersion
+      - name: Run shell-native regression and parity tests
+        run: python -m unittest tests.test_shell_native_tools -v
   browser:
     name: Browser workflows and responsive layout
     runs-on: ubuntu-latest
@@ -61,7 +88,7 @@ jobs:
   publish:
     name: Publish GitHub Pages
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: [tools, browser]
+    needs: [tools, shell-native, browser]
     runs-on: ubuntu-latest
     permissions:
       contents: read
