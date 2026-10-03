@@ -28,6 +28,26 @@ jobs:
       - run: python -m pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
       - run: python scripts/package.py
+  bash-tools:
+    name: Bash pipeline tools / Ubuntu
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install audio and shell dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg shellcheck
+      - name: Bash syntax
+        run: bash -n bash/*.sh bash/lib/*.sh
+      - name: ShellCheck
+        run: shellcheck -x -e SC1091 bash/*.sh bash/lib/*.sh
+      - name: Bash regression suite
+        run: python -m unittest tests.test_bash_pipeline_tools tests.test_bash_site -v
+      - name: Build bundles
+        run: python scripts/package.py
   browser:
     name: Browser workflows and responsive layout
     runs-on: ubuntu-latest
@@ -57,7 +77,7 @@ jobs:
   publish:
     name: Publish GitHub Pages
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: [tools, browser]
+    needs: [tools, bash-tools, browser]
     runs-on: ubuntu-latest
     permissions:
       contents: read
