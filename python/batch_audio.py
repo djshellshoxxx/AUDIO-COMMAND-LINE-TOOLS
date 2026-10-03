@@ -11,6 +11,8 @@ def scan_wavs(root: str | Path) -> list[Path]:
     root = Path(root)
     if not root.exists():
         raise ValueError(f"Input does not exist: {root}")
+    if not root.is_dir():
+        raise ValueError(f"Input must be a directory: {root}")
     files = [p for p in root.rglob("*") if p.is_file() and p.suffix.lower() in AUDIO_EXTS]
     return sorted(files, key=lambda p: str(p.relative_to(root)).lower())
 
@@ -74,6 +76,8 @@ def validate_output_tree(root: str | Path, output_dir: str | Path | None) -> Pat
     return out
 
 def analyze_onset(path: str | Path, threshold_db: float=-30.0, preroll_ms: float=10.0) -> dict:
+    if preroll_ms < 0:
+        raise ValueError("preroll_ms must be >= 0")
     x, rate = read_wav(path)
     env = np.max(np.abs(x), axis=1)
     hits = np.flatnonzero(env >= db_to_amp(threshold_db))
@@ -105,6 +109,8 @@ def _mono(x: np.ndarray) -> np.ndarray:
     return np.mean(x, axis=1)
 
 def compare_phase(reference: str | Path, target: str | Path, max_shift_ms: float=10.0) -> dict:
+    if max_shift_ms < 0:
+        raise ValueError("max_shift_ms must be >= 0")
     a, ra = read_wav(reference); b, rb = read_wav(target)
     if ra != rb:
         raise ValueError("Sample rates must match")
@@ -165,20 +171,23 @@ def phasebatch(root: str | Path, reference: str | Path, output_dir: str | Path |
             write_wav(out_root/p.relative_to(root),fixed,rate,overwrite)
     return {"tool":"phasebatch","beta":True,"reference":str(ref),"comparisons":rows}
 
-def decoded_hash(path: str | Path) -> str:
-    x, rate = read_wav(path)
+def decoded_hash_array(x: np.ndarray, rate: int) -> str:
     h=hashlib.sha256()
     h.update(struct.pack("<II", rate, x.shape[1]))
     q=np.rint(np.clip(x,-1,1)*(2**23-1)).astype("<i4")
     h.update(q.tobytes())
     return h.hexdigest()
 
+def decoded_hash(path: str | Path) -> str:
+    x, rate = read_wav(path)
+    return decoded_hash_array(x, rate)
+
 def _tree_inventory(root: Path) -> dict[str,dict]:
     inv={}
     for p in scan_wavs(root):
         rel=p.relative_to(root).as_posix()
         x, rate=read_wav(p)
-        inv[rel]={"hash":decoded_hash(p),"frames":len(x),"rate":rate,"channels":x.shape[1]}
+        inv[rel]={"hash":decoded_hash_array(x, rate),"frames":len(x),"rate":rate,"channels":x.shape[1]}
     return inv
 
 def _duplicates(inv: dict[str,dict]) -> list[dict]:
@@ -212,8 +221,14 @@ def diff_packs(old_root: str | Path, new_root: str | Path) -> dict:
             renamed.append({"from":a,"to":b}); used_old.add(a); used_new.add(b)
     removed=[n for n in removed if n not in used_old]
     added=[n for n in added if n not in used_new]
+    changes=[]
+    changes.extend({"status":"unchanged","path":n} for n in unchanged)
+    changes.extend({"status":"modified","path":n} for n in modified)
+    changes.extend({"status":"added","path":n} for n in added)
+    changes.extend({"status":"removed","path":n} for n in removed)
+    changes.extend({"status":"renamed","path":r["to"],"from_path":r["from"]} for r in renamed)
     return {"tool":"packdelta","beta":True,"unchanged":unchanged,"renamed":renamed,
-            "modified":modified,"added":added,"removed":removed,
+            "modified":modified,"added":added,"removed":removed,"changes":changes,
             "duplicates_old":_duplicates(old),"duplicates_new":_duplicates(new)}
 
 def analyze_edges(path: str | Path, threshold_db: float=-45.0) -> dict:
@@ -229,6 +244,8 @@ def analyze_edges(path: str | Path, threshold_db: float=-45.0) -> dict:
             "threshold_db":threshold_db}
 
 def repair_edges(path: str | Path, output: str | Path, fade_ms: float=5.0, overwrite: bool=False) -> dict:
+    if fade_ms < 0:
+        raise ValueError("fade_ms must be >= 0")
     x, rate=read_wav(path); y=x.copy()
     n=max(1,int(round(fade_ms*rate/1000.0))); n=min(n,len(y))
     ramp=np.linspace(0.0,1.0,n,endpoint=True)
@@ -258,7 +275,7 @@ def write_report(report: dict, output: str | Path | None, csv_output: str | Path
     else:
         print(text)
     if csv_output:
-        rows = report.get("files") or report.get("comparisons") or []
+        rows = report.get("files") or report.get("comparisons") or report.get("changes") or []
         if rows:
             keys=sorted({k for row in rows for k in row.keys()})
             p=Path(csv_output)
