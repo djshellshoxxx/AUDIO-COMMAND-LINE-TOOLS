@@ -41,12 +41,18 @@ class T(unittest.TestCase):
   for t in TOOLS:self.run_ps(t,'-Help',exp=(0,))
  def test_powershell_formattruth_native(self):
   p=self.js(self.run_ps('formattruth',self.stereo,'-Json')); self.assertEqual(p['tool'],'formattruth'); self.assertEqual(p['measurements']['channels'],2); self.assertEqual(p['measurements']['sample_rate'],48000)
- def test_powershell_stereotruth_native(self):
-  p=self.js(self.run_ps('stereotruth',self.stereo,'-Json')); self.assertIn('dual_mono_candidate',{x['category'] for x in p['findings']})
- def test_powershell_albumcontract_native(self):
-  p=self.js(self.run_ps('albumcontract',self.d,'-Json')); self.assertIn('channel_count_outlier',{x['category'] for x in p['findings']})
+ def test_powershell_transcodeaudit_native(self):
+  p=self.js(self.run_ps('transcodeaudit',self.d,'-Json')); paths=[x['path'] for x in p['measurements']['files']]; self.assertEqual(paths,sorted(paths)); self.assertEqual(p['tool'],'transcodeaudit')
  def test_powershell_batchsilence_measurement(self):
   p=self.js(self.run_ps('batchsilence',self.d,'-Json')); r=next(x for x in p['measurements']['files'] if x['path'].endswith('silence padded.wav')); self.assertGreater(r['leading_silence_seconds'],.15); self.assertGreater(r['trailing_silence_seconds'],.2)
+ def test_powershell_albumcontract_native(self):
+  p=self.js(self.run_ps('albumcontract',self.d,'-Json')); self.assertIn('channel_count_outlier',{x['category'] for x in p['findings']})
+ def test_powershell_loudwalk_native(self):
+  p=self.js(self.run_ps('loudwalk',self.stereo,'-Json')); self.assertEqual(p['tool'],'loudwalk'); self.assertIn('timeline',p['measurements']); self.assertIsInstance(p['measurements']['timeline'],list)
+ def test_powershell_stereotruth_native(self):
+  p=self.js(self.run_ps('stereotruth',self.stereo,'-Json')); self.assertIn('dual_mono_candidate',{x['category'] for x in p['findings']})
+ def test_powershell_phasewatch_native(self):
+  p=self.js(self.run_ps('phasewatch',self.stereo,'-Json')); self.assertEqual(p['tool'],'phasewatch'); self.assertIn('windows',p['measurements']); self.assertGreater(len(p['measurements']['windows']),0)
  def test_powershell_formattruth_parity(self):
   if os.name=='nt': self.skipTest('cross-shell parity runs on Linux')
   b=self.js(self.run_tool('formattruth',self.stereo,'--json')); p=self.js(self.run_ps('formattruth',self.stereo,'-Json')); self.assertEqual(b['measurements']['channels'],p['measurements']['channels']); self.assertEqual(b['measurements']['sample_rate'],p['measurements']['sample_rate'])
