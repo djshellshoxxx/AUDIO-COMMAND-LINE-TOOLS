@@ -1,23 +1,24 @@
 from pathlib import Path
-import tempfile
 import unittest
 import zipfile
 import subprocess
 
 ROOT=Path(__file__).resolve().parents[1]
 TOOLS=('edgeguard','subphase','banddrift','repeataudit','samplefreeze','transientledger')
+SPECS={'edgeguard':'bash-edgeguard',**{name:name for name in TOOLS if name!='edgeguard'}}
 
 class BashSiteTest(unittest.TestCase):
     def test_sources_specs_readme_and_site_reference_every_tool(self):
         readme=(ROOT/'README.md').read_text(encoding='utf-8')
         page=(ROOT/'site'/'index.html').read_text(encoding='utf-8')
         for name in TOOLS:
+            spec=SPECS[name]
             with self.subTest(name=name):
                 self.assertTrue((ROOT/'bash'/f'{name}.sh').is_file())
-                self.assertTrue((ROOT/'spec'/f'{name}.md').is_file())
+                self.assertTrue((ROOT/'spec'/f'{spec}.md').is_file())
                 self.assertIn(name,readme)
                 self.assertIn(name,page)
-                self.assertIn(f'spec/{name}.md',page)
+                self.assertIn(f'spec/{spec}.md',page)
                 self.assertIn(f'bash/{name}.sh',page)
         self.assertGreaterEqual(page.lower().count('beta'),6)
         self.assertIn('Bash pipeline',page)
@@ -31,7 +32,7 @@ class BashSiteTest(unittest.TestCase):
             names=set(z.namelist())
         for name in TOOLS:
             self.assertIn(f'bash/{name}.sh',names)
-            self.assertIn(f'spec/{name}.md',names)
+            self.assertIn(f'spec/{SPECS[name]}.md',names)
         for helper in ('audio-common.sh','output.sh','pcm.sh'):
             self.assertIn(f'bash/lib/{helper}',names)
 
