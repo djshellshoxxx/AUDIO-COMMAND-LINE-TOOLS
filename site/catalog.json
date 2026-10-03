@@ -1,124 +1,92 @@
 [
   {
     "name": "loopbudget",
+    "stage": "BETA",
     "description": "Check a loop against its musical length and boundary continuity.",
-    "title": "BPM-aware seam audit",
+    "title": "BETA · BPM-aware seam audit",
     "example": "--bpm 127 --bars 4 --beats 4",
     "limit": "Measured seam jumps and slope differences do not prove audibility. No repair or tempo detection.",
-    "flags": [
-      "bpm",
-      "beats",
-      "bars"
-    ]
+    "flags": ["bpm", "beats", "bars"]
   },
   {
     "name": "tailbudget",
+    "stage": "BETA",
     "description": "Find the last sample above a threshold and budget how much quiet tail to keep.",
-    "title": "Tail trimming with an explicit keep budget",
+    "title": "BETA · Tail trimming with an explicit keep budget",
     "example": "--threshold-db -65 --pad-ms 200 --audio-out trimmed.wav",
     "limit": "Uses sample amplitude, not a perceptual reverb detector. Pad keeps existing silence; it does not append silence. An all-quiet input retains at least one frame.",
-    "flags": [
-      "threshold_db",
-      "pad_ms",
-      "window_ms"
-    ]
+    "flags": ["threshold_db", "pad_ms", "window_ms"]
   },
   {
     "name": "monoledger",
+    "stage": "BETA",
     "description": "Locate active stereo windows that lose energy when folded to mono.",
-    "title": "Time-coded mono cancellation ledger",
+    "title": "BETA · Time-coded mono cancellation ledger",
     "example": "--window-ms 100 --loss-db 6 --audio-out mono.wav",
     "limit": "Requires stereo. Loss is measured against average channel energy. Silent windows are ignored; correlation is null for constant channels.",
-    "flags": [
-      "window_ms",
-      "threshold_db",
-      "loss_db"
-    ]
+    "flags": ["window_ms", "threshold_db", "loss_db"]
   },
   {
     "name": "gapcontext",
+    "stage": "BETA",
     "description": "Find interior quiet runs bordered by active audio, with context energy attached.",
-    "title": "Silence candidates with active flanks",
+    "title": "BETA · Silence candidates with active flanks",
     "example": "--threshold-db -70 --min-ms 3 --flank-ms 20 --active-db -35",
     "limit": "Candidates can be musical rests. No automatic deletion, interpolation or diagnosis of recording failure.",
-    "flags": [
-      "threshold_db",
-      "min_ms",
-      "flank_ms",
-      "active_db"
-    ]
+    "flags": ["threshold_db", "min_ms", "flank_ms", "active_db"]
   },
   {
     "name": "railruns",
+    "stage": "BETA",
     "description": "Map consecutive near-full-scale samples by channel instead of reporting only a peak.",
-    "title": "Clipping threshold event ledger",
+    "title": "BETA · Clipping threshold event ledger",
     "example": "--threshold-db -0.1 --min-run 3",
     "limit": "Detects threshold runs, not analog clipping or true peaks. Single transient peaks can be excluded by the run length.",
-    "flags": [
-      "threshold_db",
-      "min_run"
-    ]
+    "flags": ["threshold_db", "min_run"]
   },
   {
     "name": "dcjourney",
+    "stage": "BETA",
     "description": "Measure DC offset over time and distinguish local drift from the whole-file mean.",
-    "title": "Windowed DC offset history",
+    "title": "BETA · Windowed DC offset history",
     "example": "--window-ms 250 --threshold-db -40 --audio-out centered.wav",
     "limit": "Global mean removal does not correct time-varying drift. Asymmetric audio can legitimately have nonzero local means. Export refuses samples above full scale.",
-    "flags": [
-      "window_ms",
-      "threshold_db"
-    ]
+    "flags": ["window_ms", "threshold_db"]
   },
   {
     "name": "gainbudget",
+    "stage": "BETA",
     "description": "Calculate a gain budget before changing audio and show which channels set the limit.",
-    "title": "Requested gain versus sample peak ceiling",
+    "title": "BETA · Requested gain versus sample peak ceiling",
     "example": "--gain-db 3 --ceiling-db -1 --audio-out gained.wav",
     "limit": "Sample peak only, not true peak or LUFS. No limiter. No guarantee against intersample peaks. Export is 16-bit.",
-    "flags": [
-      "gain_db",
-      "ceiling_db"
-    ]
+    "flags": ["gain_db", "ceiling_db"]
   },
   {
     "name": "stemcontract",
+    "stage": "BETA",
     "description": "Check exported files against an explicit rate, channel, length and filename contract.",
-    "title": "Repeatable stem delivery contract",
+    "title": "BETA · Repeatable stem delivery contract",
     "example": "--rate 48000 --channels 2 --frames 96000 --require-active --expect drums.wav --expect bass.wav",
     "limit": "Checks export structure and activity, not phase alignment or correctness of the music. Expected basenames are exact and case sensitive. Extra filenames are allowed.",
-    "flags": [
-      "rate",
-      "channels",
-      "frames",
-      "threshold_db",
-      "require_active",
-      "expect"
-    ]
+    "flags": ["rate", "channels", "frames", "threshold_db", "require_active", "expect"]
   },
   {
     "name": "cueclock",
+    "stage": "BETA",
     "description": "Generate a musical cue grid rounded independently to exact audio frames.",
-    "title": "Sample-accurate bar clock",
+    "title": "BETA · Sample-accurate bar clock",
     "example": "--bpm 123 --beats 4 --every-bars 8 --offset-seconds 0",
     "limit": "Constant quarter-note BPM supplied by user. No tempo estimation, beat detection or tempo maps. Offset is a new bar 1 origin. No endpoint cue.",
-    "flags": [
-      "bpm",
-      "beats",
-      "every_bars",
-      "offset_seconds"
-    ]
+    "flags": ["bpm", "beats", "every_bars", "offset_seconds"]
   },
   {
     "name": "renderdelta",
+    "stage": "BETA",
     "description": "Compare two renders at a supplied sample offset and report changed sections.",
-    "title": "Offset-aware residual timeline",
+    "title": "BETA · Offset-aware residual timeline",
     "example": "--offset-frames 0 --window-ms 100 --threshold-db -80 --audio-out residual.wav",
     "limit": "No automatic alignment or gain matching. A null does not imply perceptual equivalence; reports are sample differences. Unmatched frames are counted, not compared. Residual export refuses levels above full scale.",
-    "flags": [
-      "window_ms",
-      "threshold_db",
-      "offset_frames"
-    ]
+    "flags": ["window_ms", "threshold_db", "offset_frames"]
   }
 ]
