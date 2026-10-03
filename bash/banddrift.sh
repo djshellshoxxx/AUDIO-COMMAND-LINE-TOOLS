@@ -26,14 +26,20 @@ for((i=0;i<${#NAMES[@]};i++));do for((j=i+1;j<${#NAMES[@]};j++));do awk -v a="${
 setup;input=${args[0]};require_file "$input";rate=$(probe_rate "$input");events="$TMPDIR_TOOL/events.tsv";:>"$events";frames=$((rate*WINDOW/1000));((frames>0))||die "window too small"
 metric_files=()
 for((b=0;b<${#NAMES[@]};b++));do
- out="$TMPDIR_TOOL/b$b.pcm";met="$TMPDIR_TOOL/b$b.txt";filter="highpass=f=${LOWS[b]},lowpass=f=${HIGHS[b]}";decode_s16 "$input" "$out" 1 "$filter"||die "ffmpeg band decode failed";
+ out="$TMPDIR_TOOL/b$b.pcm";met="$TMPDIR_TOOL/b$b.txt";filter="highpass=f=${LOWS[b]},lowpass=f=${HIGHS[b]}";decode_s16 "$input" "$out" 1 "$filter"||die "ffmpeg band decode failed"
  od -An -v -t d2 -- "$out"|awk -v f="$frames" '{for(i=1;i<=NF;i++){k=int(n/f);s[k]+=$i*$i;c[k]++;n++}}END{for(k=0;k<=int((n-1)/f);k++)if(c[k])printf "%d %.12f %d\n",k,s[k],c[k]}' >"$met";metric_files+=("$met")
 done
-paste "${metric_files[@]}" >"$TMPDIR_TOOL/all.txt"
-awk -v nb="${#NAMES[@]}" -v names="$(IFS=,;echo "${NAMES[*]}")" -v rate="$rate" -v frames="$frames" -v dev="$DEV" -v active="$ACTIVE" -v ev="$events" '
+paste "${metric_files[@]}" >"$TMPDIR_TOOL/all.txt"; raw="$TMPDIR_TOOL/events.raw"
+awk -v nb="${#NAMES[@]}" -v names="$(IFS=,;echo "${NAMES[*]}")" -v rate="$rate" -v frames="$frames" -v dev="$DEV" -v active="$ACTIVE" -v minrun="$MINRUN" -v ev="$raw" '
 BEGIN{split(names,nm,",")}
-{w=$1;total=0;for(b=1;b<=nb;b++){off=(b-1)*3;ss[b]=$(off+2);cc[b]=$(off+3);total+=ss[b]} if(total<=0)next;tdb=20*log(sqrt(total/(cc[1]*nb))/32768)/log(10);if(tdb<active)next;activew[++m]=w;for(b=1;b<=nb;b++){share[m,b]=100*ss[b]/total;vals[b,m]=share[m,b]}}
-function sortv(a,n,  i,j,t){for(i=1;i<=n;i++)for(j=i+1;j<=n;j++)if(a[j]<a[i]){t=a[i];a[i]=a[j];a[j]=t}}
-END{if(!m)exit;for(b=1;b<=nb;b++){delete tmp;for(i=1;i<=m;i++)tmp[i]=vals[b,i];sortv(tmp,m);med[b]=(m%2)?tmp[(m+1)/2]:(tmp[m/2]+tmp[m/2+1])/2}
- for(i=1;i<=m;i++){w=activew[i];hits=0;for(b=1;b<=nb;b++){d=share[i,b]-med[b];ad=d<0?-d:d;if(ad>=dev){kind=d>0?"band_share_high":"band_share_low";printf "%s\t%.6f\t%.6f\treview\tband=%s,share=%.3f,median=%.3f,deviation=%.3f\n",kind,w*frames/rate,(w*frames+frames)/rate,nm[b],share[i,b],med[b],ad >> ev;hits++}}if(hits>=2)printf "broad_tonal_shift\t%.6f\t%.6f\treview\tbands=%d\n",w*frames/rate,(w*frames+frames)/rate,hits >> ev}}' "$TMPDIR_TOOL/all.txt"
+{w=$1;total=0;for(b=1;b<=nb;b++){off=(b-1)*3;ss[b]=$(off+2);cc[b]=$(off+3);total+=ss[b]}if(total<=0)next;tdb=20*log(sqrt(total/(cc[1]*nb))/32768)/log(10);if(tdb<active)next;activew[++m]=w;for(b=1;b<=nb;b++){share[m,b]=100*ss[b]/total;vals[b,m]=share[m,b]}}
+function sortv(a,n, i,j,t){for(i=1;i<=n;i++)for(j=i+1;j<=n;j++)if(a[j]<a[i]){t=a[i];a[i]=a[j];a[j]=t}}
+function emitband(b,s,e,sign, maxdev, kind){if(e-s+1<minrun)return;kind=sign>0?"band_share_high":"band_share_low";printf "%s\t%.6f\t%.6f\treview\tband=%s,windows=%d,max_deviation=%.3f\n",kind,activew[s]*frames/rate,(activew[e]*frames+frames)/rate,nm[b],e-s+1,maxdev >> ev}
+function emitbroad(s,e){if(e-s+1<minrun)return;printf "broad_tonal_shift\t%.6f\t%.6f\treview\twindows=%d\n",activew[s]*frames/rate,(activew[e]*frames+frames)/rate,e-s+1 >> ev}
+END{
+ if(!m)exit;for(b=1;b<=nb;b++){delete tmp;for(i=1;i<=m;i++)tmp[i]=vals[b,i];sortv(tmp,m);med[b]=(m%2)?tmp[(m+1)/2]:(tmp[m/2]+tmp[m/2+1])/2}
+ for(b=1;b<=nb;b++){rs=0;rsign=0;rmax=0;prevw=-2;for(i=1;i<=m;i++){d=share[i,b]-med[b];ad=d<0?-d:d;sign=(ad>=dev?(d>0?1:-1):0);cont=(sign!=0&&sign==rsign&&activew[i]==prevw+1);if(cont){re=i;if(ad>rmax)rmax=ad}else{if(rsign!=0)emitband(b,rs,re,rsign,rmax);if(sign!=0){rs=i;re=i;rsign=sign;rmax=ad}else rsign=0}prevw=activew[i]}if(rsign!=0)emitband(b,rs,re,rsign,rmax)}
+ bs=0;bin=0;prevw=-2;for(i=1;i<=m;i++){hits=0;for(b=1;b<=nb;b++){d=share[i,b]-med[b];if((d<0?-d:d)>=dev)hits++}good=(hits>=2);if(good&&bin&&activew[i]==prevw+1){be=i}else{if(bin)emitbroad(bs,be);if(good){bs=i;be=i;bin=1}else bin=0}prevw=activew[i]}if(bin)emitbroad(bs,be)
+}' "$TMPDIR_TOOL/all.txt"
+if [[ -s "$raw" ]];then head -n "$TOP" "$raw" >"$events";fi
 review=0;grep -q $'\treview\t' "$events"&&review=1||true;status=$([[ $review == 1 ]]&&echo review||echo ok);report_render "$TOOL" "$input" "$events" "$status" "$OUTPUT" "$FORMAT" "$NO_HEADER" "$QUIET"||die "failed to write report";((review))&&exit 1||exit 0
