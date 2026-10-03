@@ -116,6 +116,22 @@ class BatchAudioTests(unittest.TestCase):
             self.assertIn("added.wav", r["added"])
             self.assertTrue(any(len(g["files"]) >= 2 for g in r["duplicates_new"]))
 
+    def test_packdelta_csv_has_change_rows(self):
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            old, new = td / "old", td / "new"
+            old.mkdir()
+            new.mkdir()
+            write_wav(old / "old.wav", np.ones(100) * 0.1)
+            write_wav(new / "new.wav", np.ones(100) * 0.2)
+            r = batch_audio.diff_packs(old, new)
+            out = td / "changes.csv"
+            batch_audio.write_report(r, td / "report.json", out)
+            text = out.read_text(encoding="utf-8")
+            self.assertIn("status", text)
+            self.assertIn("removed", text)
+            self.assertIn("added", text)
+
     def test_edgeguard_detects_and_repairs_hot_edges(self):
         with tempfile.TemporaryDirectory() as td:
             td = Path(td)
@@ -156,6 +172,26 @@ class BatchAudioTests(unittest.TestCase):
             write_wav(td / "sub" / "b.wav", np.zeros(100))
             found = batch_audio.scan_wavs(td)
             self.assertEqual([p.name for p in found], ["A.WAV", "b.wav"])
+
+    def test_scan_requires_directory(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "a.wav"
+            write_wav(p, np.zeros(100))
+            with self.assertRaises(ValueError):
+                batch_audio.scan_wavs(p)
+
+    def test_negative_time_options_are_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            p, q = td / "a.wav", td / "b.wav"
+            write_wav(p, np.zeros(1000))
+            write_wav(q, np.zeros(1000))
+            with self.assertRaises(ValueError):
+                batch_audio.analyze_onset(p, preroll_ms=-1)
+            with self.assertRaises(ValueError):
+                batch_audio.compare_phase(p, q, max_shift_ms=-1)
+            with self.assertRaises(ValueError):
+                batch_audio.repair_edges(p, td / "o.wav", fade_ms=-1)
 
 
 if __name__ == "__main__":
