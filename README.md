@@ -1,8 +1,10 @@
 # Audio Command Line Tools
 
-Ten focused audio utilities from **Circuit Drift Labs**. Run them in Python, Node, or the browser. Every tool includes a spec with pseudocode, JSON reports, adjustable flags, and synthetic regression tests.
+Focused audio utilities from **Circuit Drift Labs**. The original ten tools run in Python, Node, or the browser. A second collection adds six **Beta Bash-native pipeline tools** built around FFmpeg/FFprobe and ordinary Unix utilities.
 
 **[Open the browser workbench](https://djshellshoxxx.github.io/AUDIO-COMMAND-LINE-TOOLS/)** · [Circuit Drift Labs](https://djshellshoxxx.github.io/circuitdriftlabs/) · [Research and existing alternatives](docs/RESEARCH.md) · [Program audit](docs/AUDIT.md)
+
+## Original Python / JavaScript tools
 
 | Tool | What it does | Useful controls / output |
 |---|---|---|
@@ -17,7 +19,67 @@ Ten focused audio utilities from **Circuit Drift Labs**. Run them in Python, Nod
 | [cueclock](spec/cueclock.md) | Sample-rounded bar cue grid | BPM, meter, spacing, origin; cues and rounding errors |
 | [renderdelta](spec/renderdelta.md) | Offset-aware render difference timeline | Sample offset, window, threshold; optional residual WAV |
 
-These are useful combinations of established audio techniques. Related tools already exist; the research does not establish that every workflow is unprecedented. No trained models or external audio services are used.
+These are useful combinations of established audio techniques. Related tools already exist; the research does not establish that every workflow is unprecedented.
+
+## Bash pipeline tools — Beta
+
+These six programs are native Bash implementations. They do **not** call the repository's Python or JavaScript engine. Runtime dependencies are Bash 4.4+, FFmpeg, FFprobe, awk and ordinary Unix/coreutils commands. `jq` is optional for downstream processing only.
+
+| Tool | Narrow workflow | Typical output |
+|---|---|---|
+| [edgeguard](spec/edgeguard.md) | Find hard starts/ends and possible truncated render boundaries | Boundary/fade review events |
+| [subphase](spec/subphase.md) | Inspect stereo correlation and balance only below a chosen crossover | Time-coded low-band phase events |
+| [banddrift](spec/banddrift.md) | Find tonal-balance sections that depart from the file's own median behavior | Relative band-share drift ledger |
+| [repeataudit](spec/repeataudit.md) | Detect exact repeated decoded PCM blocks | Adjacent/non-adjacent repeat events |
+| [samplefreeze](spec/samplefreeze.md) | Detect non-zero or near-flat frozen PCM sample runs | Channel-aware freeze ranges |
+| [transientledger](spec/transientledger.md) | Compare transient density and crest factor across a file | Relative transient/crest regimes |
+
+Research did not identify a **well-established standalone** command with the same narrow purpose for each of these composed workflows. That is not a claim that no comparable implementation exists anywhere.
+
+All six share the same automation-friendly contract:
+
+```text
+--help
+--version
+--format text|tsv|jsonl
+--output PATH
+--no-header        # TSV
+--quiet
+--keep-temp
+```
+
+Exit `0` means clean analysis, `1` means one or more review events were emitted, and `2` means usage/dependency/input/analysis/output failure. Reports go to stdout unless `--output` is used; diagnostics go to stderr. Inputs are never modified.
+
+Examples:
+
+```bash
+bash bash/edgeguard.sh render.wav --format jsonl
+bash bash/subphase.sh mix.wav --crossover-hz 120 --format tsv
+bash bash/banddrift.sh master.wav --window-ms 500 --format jsonl
+bash bash/repeataudit.sh capture.wav --block-ms 100 --format jsonl
+bash bash/samplefreeze.sh recording.wav --min-run-ms 20 --format tsv
+bash bash/transientledger.sh drums.wav --window-ms 1000 --format jsonl
+```
+
+The main reason for Bash here is composition:
+
+```bash
+find renders -type f -name '*.wav' -print0 |
+  xargs -0 -n1 bash bash/edgeguard.sh --format tsv --no-header |
+  awk -F '\t' '$0 ~ /possible_truncated/'
+
+bash bash/subphase.sh mix.wav --format tsv |
+  awk -F '\t' '$0 ~ /negative_sub_correlation|critical_sub_correlation/'
+
+bash bash/banddrift.sh master.wav --format tsv |
+  sort -t $'\t' -k7,7
+
+bash bash/repeataudit.sh capture.wav --format jsonl > repeats.jsonl
+bash bash/samplefreeze.sh capture.wav --format jsonl > freezes.jsonl
+cat repeats.jsonl freezes.jsonl | grep -v '"event":"summary"'
+```
+
+The generated download bundle is `site/downloads/cdl-audio-bash.zip` and includes the six entry scripts, shared Bash libraries, their specs, README and license.
 
 ## Run Python
 
@@ -32,23 +94,11 @@ python python/renderdelta.py A.wav B.wav --offset-frames 12 --audio-out residual
 python python/drift_audio.py cueclock song.wav --bpm 123 --every-bars 8
 ```
 
-The Python ZIP places the entry scripts and shared engine in the same folder. Run `python loopbudget.py ...` there. Keep `drift_audio.py` alongside every entry script. Bash, PowerShell, and batch files are **launchers**, not independent DSP ports:
-
-```sh
-bash python/drift-audio.sh loopbudget loop.wav --bpm 127
-```
-
-```powershell
-.\python\drift-audio.ps1 loopbudget loop.wav --bpm 127
-```
-
-```bat
-python\drift-audio.cmd loopbudget loop.wav --bpm 127
-```
+The legacy `python/drift-audio.sh`, `.ps1`, and `.cmd` files are launchers for the Python engine. They are separate from the native programs under `bash/`.
 
 ## Run JavaScript
 
-Node 20+; no package install. These are native JavaScript ports, and the browser uses the same engine.
+Node 20+; no package install. These are native JavaScript ports, and the browser workbench uses the same engine.
 
 ```sh
 node site/js/loopbudget.mjs loop.wav --bpm 127 --bars 4
@@ -56,30 +106,24 @@ node site/js/renderdelta.mjs A.wav B.wav --window-ms 50 --output changes.json
 node site/js/cli.mjs gainbudget mix.wav --gain-db 2 --ceiling-db -1 --audio-out gained.wav
 ```
 
-The JavaScript ZIP places all modules in one folder. Keep `engine.mjs` and `cli.mjs` alongside the ten entry modules.
-
 ## Inputs and outputs
 
-Supported: little-endian RIFF WAV PCM 8/16/24/32-bit or IEEE float 32/64-bit, 1–32 channels, 1–384000 Hz, maximum 64 MiB per file. CLI inputs are limited to 128 MiB combined. Browser uploads are also limited to 64 MiB total. MP3, FLAC and compressed WAV are rejected explicitly. Extensible PCM/float WAV is supported when valid bits equal container bits. Convert to ordinary PCM WAV externally, for example with FFmpeg:
+The original Python/JavaScript family parses WAV directly: little-endian RIFF WAV PCM 8/16/24/32-bit or IEEE float 32/64-bit, 1–32 channels, 1–384000 Hz, maximum 64 MiB per file and 128 MiB combined CLI input. The browser limit is 64 MiB total.
 
-```sh
-ffmpeg -i input.flac -c:a pcm_s24le input.wav
-```
+The Bash pipeline family accepts formats FFmpeg can decode. Analysis is performed on temporary canonical PCM and the original file is never rewritten. Temporary files are deleted on normal success/failure/interrupt unless `--keep-temp` is explicitly selected.
 
-Reports are JSON on stdout unless `--output` is given. Each script supports `--help` with flag descriptions and defaults. Windowed analyses and event reports are capped at 100000 windows/entries; increase window/run/gap sizes or split the input if needed. Timeline ends are exclusive. Decibel silence floor is -240 dB. `--audio-out` is supported by tailbudget, monoledger, dcjourney, gainbudget, and renderdelta. Exports are 16-bit PCM with original sample rate, without metadata or dithering. Original files cannot be overwritten, even with `--overwrite`.
-
-Measurements are sample peaks and RMS, not true peaks or LUFS. Gap and rail events are evidence to inspect, not proof of a recording fault. Renderdelta uses a user-supplied offset and reports only overlapping samples plus unmatched frame counts; it does not automatically align or resample. DCjourney removes global means only when exporting.
-
-Exit codes: **0** finished; **1** stem contract failed; **2** input, flag, or I/O error. Other tools leave threshold decisions to the user. Above-full-scale audio exports fail instead of clipping. Gain exports additionally require the requested ceiling to be met, including after PCM rounding. Very low ceilings below one PCM step can yield silence.
+The Bash heuristics intentionally report review evidence rather than asserting mastering errors, provenance, corruption causes or creative intent.
 
 ## Verify and build
 
 ```sh
 python -m unittest discover -s tests -v
+bash -n bash/*.sh bash/lib/*.sh
+shellcheck -x -e SC1091 bash/*.sh bash/lib/*.sh
 python scripts/package.py
 python -m http.server 8000 --directory site
 ```
 
-Then open `http://localhost:8000`. Serve over HTTP(S); opening `index.html` as a local file will block ES modules/workers. `tests/browser.cjs` tests all ten browser flows with Playwright after starting the server and installing Playwright/Chromium. GitHub Actions runs Python/Node parity tests on Linux, Windows and macOS, then deploys the site through GitHub Pages.
+GitHub Actions tests the original Python/JavaScript family on Linux, Windows and macOS, runs the Bash/FFmpeg suite and ShellCheck on Ubuntu, exercises the browser workbench with Playwright, builds all bundles, and publishes GitHub Pages from `main` after required jobs pass.
 
 License: MIT. Research links describe alternatives and underlying methods; no third-party source code or audio is copied.
