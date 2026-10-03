@@ -22,4 +22,8 @@ od -An -v -t d2 -- "$pcm"|awk -v ch="$ch" -v rate="$rate" -v minf="$minframes" -
 function emit(c,s,e,val, k){if(sel!="all"&&c!=sel)return;if(val==0&&!incz)return;if(val!=0&&((val<0?-val:val)<floor))return;k=(val==0?"zero_flatline":kind);printf "%s\t%.6f\t%.6f\treview\tchannel=%d,value=%d,frames=%d\n",k,s/rate,e/rate,c,val,e-s >> ev}
 {for(i=1;i<=NF;i++){c=((n)%ch)+1;v=$i;frame=int(n/ch);if(!(c in have)){prev[c]=v;start[c]=frame;have[c]=1}else{d=v-prev[c];if(d<0)d=-d;if(d>tol){if(frame-start[c]>=minf)emit(c,start[c],frame,prev[c]);start[c]=frame;prev[c]=v}}n++}}
 END{last=int(n/ch);for(c=1;c<=ch;c++)if(last-start[c]>=minf)emit(c,start[c],last,prev[c])}'
+if [[ "$CHANNEL" == all && "$ch" -gt 1 && -s "$events" ]];then
+ awk -F'\t' '{k=$2 FS $3;count[k]++;detail[k]=detail[k] (detail[k]?",":"") $5}END{for(k in count)if(count[k]>1){split(k,p,FS);printf "multichannel_freeze\t%s\t%s\treview\tchannels=%d,%s\n",p[1],p[2],count[k],detail[k]}}' "$events" >>"$events.multi"
+ cat "$events.multi" >>"$events"
+fi
 review=0;grep -q $'\treview\t' "$events"&&review=1||true;status=$([[ $review == 1 ]]&&echo review||echo ok);report_render "$TOOL" "$input" "$events" "$status" "$OUTPUT" "$FORMAT" "$NO_HEADER" "$QUIET"||die "failed to write report";((review))&&exit 1||exit 0
