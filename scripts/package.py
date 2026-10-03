@@ -9,7 +9,7 @@ def bundle(name,files):
     with zipfile.ZipFile(DEST/name,'w',compression=zipfile.ZIP_DEFLATED) as archive:
         for source,target in sorted(files,key=lambda pair:pair[1]):
             entry=zipfile.ZipInfo(target,date_time=(2026,1,1,0,0,0));entry.compress_type=zipfile.ZIP_DEFLATED
-            entry.external_attr=0o644<<16
+            entry.external_attr=(0o755 if target.endswith('.sh') else 0o644)<<16
             archive.writestr(entry,source.read_bytes())
 
 def main():
@@ -20,6 +20,14 @@ def main():
     powershell=ROOT/'powershell'
     if powershell.exists():
         bundle('cdl-winaudioforensics-powershell.zip',common+[(p,p.name) for p in powershell.iterdir() if p.is_file()])
+    bash_dir=ROOT/'bash'
+    if bash_dir.exists():
+        bash_files=[(p,str(p.relative_to(ROOT))) for p in bash_dir.rglob('*.sh')]
+        bash_specs=[
+            (ROOT/'spec'/'bash-edgeguard.md','spec/bash-edgeguard.md'),
+            *[(ROOT/'spec'/f'{name}.md',f'spec/{name}.md') for name in ('banddrift','repeataudit','samplefreeze','subphase','transientledger')],
+        ]
+        bundle('cdl-audio-bash.zip',[(ROOT/'LICENSE','LICENSE'),(ROOT/'README.md','README.md')]+bash_files+bash_specs)
     for folder in ('spec','docs'):
         target=ROOT/'site'/folder
         target.mkdir(exist_ok=True)
