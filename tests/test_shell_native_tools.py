@@ -1,5 +1,5 @@
 import json, pathlib, shutil, subprocess, tempfile, unittest
-ROOT=pathlib.Path(__file__).resolve().parents[1]; BASH=ROOT/'bash'
+ROOT=pathlib.Path(__file__).resolve().parents[1]; BASH=ROOT/'bash'; POWERSHELL=ROOT/'powershell'
 TOOLS=['formattruth','transcodeaudit','batchsilence','albumcontract','loudwalk','stereotruth','phasewatch']
 class T(unittest.TestCase):
  @classmethod
@@ -14,6 +14,10 @@ class T(unittest.TestCase):
  def tearDownClass(c): c.t.cleanup()
  def run_tool(self,tool,*args,exp=(0,1)):
   p=BASH/(tool+'.sh'); self.assertTrue(p.exists(),f'missing {p}'); before={x:(x.stat().st_mtime_ns,x.read_bytes()) for x in self.d.glob('*.wav')}; cp=subprocess.run(['bash',str(p),*map(str,args)],text=True,capture_output=True); self.assertIn(cp.returncode,exp,cp.stderr); after={x:(x.stat().st_mtime_ns,x.read_bytes()) for x in self.d.glob('*.wav')}; self.assertEqual(before,after); return cp
+
+ def run_ps(self,tool,*args,exp=(0,1)):
+  if not shutil.which('pwsh'): self.skipTest('pwsh not installed')
+  p=POWERSHELL/(tool+'.ps1'); self.assertTrue(p.exists(),f'missing {p}'); before={x:(x.stat().st_mtime_ns,x.read_bytes()) for x in self.d.glob('*.wav')}; cp=subprocess.run(['pwsh','-NoProfile','-File',str(p),*map(str,args)],text=True,capture_output=True); self.assertIn(cp.returncode,exp,cp.stderr); after={x:(x.stat().st_mtime_ns,x.read_bytes()) for x in self.d.glob('*.wav')}; self.assertEqual(before,after); return cp
  def js(self,cp):
   try:return json.loads(cp.stdout)
   except Exception as e:self.fail(f'{e}\n{cp.stdout}\n{cp.stderr}')
@@ -33,4 +37,15 @@ class T(unittest.TestCase):
   d=self.js(self.run_tool('stereotruth',self.stereo,'--json')); self.assertIn('dual_mono_candidate',{x['category'] for x in d['findings']})
  def test_phasewatch(self):
   d=self.js(self.run_tool('phasewatch',self.stereo,'--json')); self.assertIn('windows',d['measurements'])
+
+ def test_powershell_help(self):
+  for t in TOOLS:self.run_ps(t,'-Help',exp=(0,))
+ def test_powershell_formattruth_parity(self):
+  b=self.js(self.run_tool('formattruth',self.stereo,'--json')); p=self.js(self.run_ps('formattruth',self.stereo,'-Json')); self.assertEqual(b['measurements']['channels'],p['measurements']['channels']); self.assertEqual(b['measurements']['sample_rate'],p['measurements']['sample_rate'])
+ def test_powershell_stereotruth_category_parity(self):
+  b=self.js(self.run_tool('stereotruth',self.stereo,'--json')); p=self.js(self.run_ps('stereotruth',self.stereo,'-Json')); self.assertEqual({x['category'] for x in b['findings']},{x['category'] for x in p['findings']})
+ def test_powershell_albumcontract_category_parity(self):
+  b=self.js(self.run_tool('albumcontract',self.d,'--json')); p=self.js(self.run_ps('albumcontract',self.d,'-Json')); self.assertEqual({x['category'] for x in b['findings']},{x['category'] for x in p['findings']})
+ def test_powershell_batchsilence_measurement(self):
+  p=self.js(self.run_ps('batchsilence',self.d,'-Json')); r=next(x for x in p['measurements']['files'] if x['path'].endswith('silence padded.wav')); self.assertGreater(r['leading_silence_seconds'],.15); self.assertGreater(r['trailing_silence_seconds'],.2)
 if __name__=='__main__':unittest.main()
