@@ -186,6 +186,36 @@ class ToolsTest(unittest.TestCase):
             self.assertEqual(py.returncode,0,py.stderr);self.assert_nested_close(json.loads(py.stdout),json.loads(js.stdout))
         raw=bytearray(f.read_bytes());struct.pack_into('<d',raw,44,float('nan'));f.write_bytes(raw)
         for js in (False,True):self.assertEqual(self.cli('gainbudget',f,js=js).returncode,2)
+    def test_extensible_pcm_and_float(self):
+        for code,bits,payload in [(1,24,b'\x00\x00\x80\x00\x00\x00\xff\xff\x7f\x00\x00\x00'),(3,32,struct.pack('<ffff',-.5,0,.5,0))]:
+            align=bits//8;guid=struct.pack('<I',code)+bytes.fromhex('00001000800000aa00389b71')
+            fmt=struct.pack('<HHIIHHHHI',65534,1,1000,1000*align,align,bits,22,bits,1)+guid
+            body=b'WAVEfmt '+struct.pack('<I',40)+fmt+b'data'+struct.pack('<I',len(payload))+payload
+            f=self.p/'ext.wav';f.write_bytes(b'RIFF'+struct.pack('<I',len(body))+body)
+            py=self.cli('gainbudget',f);js=self.cli('gainbudget',f,js=True)
+            self.assertEqual(py.returncode,0,py.stderr);self.assertEqual(js.returncode,0,js.stderr)
+            self.assert_nested_close(json.loads(py.stdout),json.loads(js.stdout))
+            bad=bytearray(f.read_bytes());struct.pack_into('<H',bad,38,bits-1);f.write_bytes(bad)
+            for use_js in (False,True):self.assertEqual(self.cli('gainbudget',f,js=use_js).returncode,2)
+    def test_equals_flag_forms(self):
+        for tool in ('railruns','dcjourney'):
+            py=self.cli(tool,self.p/'a.wav','--threshold-db=-20');js=self.cli(tool,self.p/'a.wav','--threshold-db=-20',js=True)
+            self.assertEqual(py.returncode,0,py.stderr);self.assertEqual(js.returncode,0,js.stderr)
+            self.assert_nested_close(json.loads(py.stdout),json.loads(js.stdout))
+    def test_unified_entry_points(self):
+        for language,entry in [('python','python/drift_audio.py'),('node','site/js/cli.mjs')]:
+            executable=sys.executable if language=='python' else 'node'
+            r=subprocess.run([executable,str(ROOT/entry),'loopbudget',str(self.p/'a.wav'),'--bpm','120'],capture_output=True,text=True)
+            self.assertEqual(r.returncode,0,r.stderr);self.assertEqual(json.loads(r.stdout)['frame_error'],0)
+    def test_shell_launchers(self):
+        import os, shutil
+        spaced=self.p/'a file.wav';spaced.write_bytes((self.p/'a.wav').read_bytes())
+        if os.name=='nt':
+            commands=[['cmd','/c',str(ROOT/'python/drift-audio.cmd'), 'loopbudget',str(spaced),'--bpm','120'], ['powershell','-NoProfile','-File',str(ROOT/'python/drift-audio.ps1'),'loopbudget',str(spaced),'--bpm','120']]
+        elif shutil.which('bash'):commands=[['bash',str(ROOT/'python/drift-audio.sh'),'loopbudget',str(spaced),'--bpm','120']]
+        else:self.skipTest('No compatible shell')
+        for command in commands:
+            r=subprocess.run(command,capture_output=True,text=True);self.assertEqual(r.returncode,0,r.stderr);self.assertEqual(json.loads(r.stdout)['frame_error'],0)
     def test_above_fullscale_export_rejected(self):
         with self.assertRaises(ValueError):write_wav(self.p/'bad.wav',np.ones((2,1))*1.1,1000)
     def test_ancillary_odd_chunk(self):

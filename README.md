@@ -60,7 +60,7 @@ The JavaScript ZIP places all modules in one folder. Keep `engine.mjs` and `cli.
 
 ## Inputs and outputs
 
-Supported: little-endian RIFF WAV PCM 8/16/24/32-bit or IEEE float 32/64-bit, 1–32 channels, 1–384000 Hz, maximum 64 MiB per file. Browser uploads are also limited to 64 MiB total. MP3, FLAC, compressed WAV and extensible WAV are rejected explicitly. Convert to ordinary PCM WAV externally, for example with FFmpeg:
+Supported: little-endian RIFF WAV PCM 8/16/24/32-bit or IEEE float 32/64-bit, 1–32 channels, 1–384000 Hz, maximum 64 MiB per file. Browser uploads are also limited to 64 MiB total. MP3, FLAC and compressed WAV are rejected explicitly. Extensible PCM/float WAV is supported when valid bits equal container bits. Convert to ordinary PCM WAV externally, for example with FFmpeg:
 
 ```sh
 ffmpeg -i input.flac -c:a pcm_s24le input.wav

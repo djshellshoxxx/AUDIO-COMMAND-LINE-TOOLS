@@ -40,6 +40,14 @@ def decode_wav(b):
             if fmt is not None or size < 16:
                 raise ValueError('Invalid or duplicate format chunk')
             fmt = struct.unpack_from('<HHIIHH', b, start)
+            if fmt[0] == 0xFFFE:
+                if size < 40 or struct.unpack_from('<H',b,start+16)[0] < 22 or 18+struct.unpack_from('<H',b,start+16)[0] > size:
+                    raise ValueError('Invalid extensible WAV header')
+                valid_bits=struct.unpack_from('<H',b,start+18)[0]
+                guid=b[start+24:start+40]
+                if valid_bits != fmt[-1] or guid[4:] != bytes.fromhex('00001000800000aa00389b71') or guid[:4] not in (b'\x01\x00\x00\x00',b'\x03\x00\x00\x00'):
+                    raise ValueError('Unsupported extensible WAV subformat or valid bits')
+                fmt=(struct.unpack_from('<I',guid)[0],)+fmt[1:]
         if kind == b'data':
             if payload is not None:
                 raise ValueError('Multiple data chunks unsupported')

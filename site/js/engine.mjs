@@ -38,7 +38,14 @@ export function decodeWav(buffer) {
     if(pos+8>end) throw Error('Truncated WAV chunk header');
     const kind=tag(pos),size=v.getUint32(pos+4,true),start=pos+8;
     if(start+size+(size&1)>end) throw Error('Truncated WAV chunk');
-    if(kind==='fmt ') {if(fmt || size<16) throw Error('Invalid or duplicate format chunk');fmt={encoding:v.getUint16(start,true),channels:v.getUint16(start+2,true),rate:v.getUint32(start+4,true),byteRate:v.getUint32(start+8,true),align:v.getUint16(start+12,true),bits:v.getUint16(start+14,true)};}
+    if(kind==='fmt ') {if(fmt || size<16) throw Error('Invalid or duplicate format chunk');fmt={encoding:v.getUint16(start,true),channels:v.getUint16(start+2,true),rate:v.getUint32(start+4,true),byteRate:v.getUint32(start+8,true),align:v.getUint16(start+12,true),bits:v.getUint16(start+14,true)};
+      if(fmt.encoding===0xfffe){
+        if(size<40 || v.getUint16(start+16,true)<22 || 18+v.getUint16(start+16,true)>size)throw Error('Invalid extensible WAV header');
+        const guid=Array.from(new Uint8Array(buffer,start+24,16)),code=v.getUint32(start+24,true);
+        if(v.getUint16(start+18,true)!==fmt.bits || ![1,3].includes(code) || guid.slice(4).join(',')!=='0,0,16,0,128,0,0,170,0,56,155,113')throw Error('Unsupported extensible WAV subformat or valid bits');
+        fmt.encoding=code;
+      }
+    }
     if(kind==='data') {if(data) throw Error('Multiple data chunks unsupported');data={start,size};}
     pos=start+size+(size&1);
   }
