@@ -38,7 +38,9 @@ END{
  if(side!="start" && edb>active) printf "active_at_end\t%.6f\t%.6f\tinfo\trms_db=%.3f\n",(n-w)/rate,n/rate,edb >> ev;
  if(side!="end" && dstart>=disc) printf "start_discontinuity\t0\t%.6f\treview\tdelta=%.6f\n",1/rate,dstart >> ev;
  if(side!="start" && dend>=disc) printf "end_discontinuity\t%.6f\t%.6f\treview\tdelta=%.6f\n",(n-1)/rate,n/rate,dend >> ev;
- if(side!="end" && sdb>bound && sflat) printf "possible_truncated_start\t0\t%.6f\treview\trms_db=%.3f,no_fade_evidence=1\n",w/rate,sdb >> ev;
- if(side!="start" && edb>bound && eflat) printf "possible_truncated_end\t%.6f\t%.6f\treview\trms_db=%.3f,no_fade_evidence=1\n",(n-w)/rate,n/rate,edb >> ev;
+ if(side!="end" && sdb>bound && sflat) printf "no_start_fade_evidence\t0\t%.6f\treview\trms_db=%.3f\n",w/rate,sdb >> ev;
+ if(side!="start" && edb>bound && eflat) printf "no_end_fade_evidence\t%.6f\t%.6f\treview\trms_db=%.3f\n",(n-w)/rate,n/rate,edb >> ev;
+ if(side!="end" && sdb>bound && (sflat || dstart>=disc)) printf "possible_truncated_start\t0\t%.6f\treview\trms_db=%.3f\n",w/rate,sdb >> ev;
+ if(side!="start" && edb>bound && (eflat || dend>=disc)) printf "possible_truncated_end\t%.6f\t%.6f\treview\trms_db=%.3f\n",(n-w)/rate,n/rate,edb >> ev;
 }'
 review=0; grep -q $'\treview\t' "$events" && review=1 || true; status=$([[ $review == 1 ]] && echo review || echo ok); report_render "$TOOL" "$input" "$events" "$status" "$OUTPUT" "$FORMAT" "$NO_HEADER" "$QUIET" || die "failed to write report"; ((review)) && exit 1 || exit 0
