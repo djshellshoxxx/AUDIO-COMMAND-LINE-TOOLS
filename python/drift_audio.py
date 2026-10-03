@@ -345,6 +345,9 @@ def main(argv=None, fixed_tool=None):
         if tool not in ('stemcontract','renderdelta') and len(args.input)!=1:
             raise ValueError('This tool takes one input file')
         if tool=='renderdelta' and len(args.input)!=2: raise ValueError('renderdelta takes two input files')
+        for value in (args.output,getattr(args,'audio_out',None)):
+            if value and Path(value).is_symlink() and not Path(value).exists():
+                raise ValueError('Output contains a dangling symlink: '+value)
         inputs={Path(p).resolve() for p in args.input}
         outputs=[Path(p).resolve() for p in (args.output,getattr(args,'audio_out',None)) if p]
         same_input=any(p.exists() and source.exists() and p.samefile(source) for p in outputs for source in inputs)

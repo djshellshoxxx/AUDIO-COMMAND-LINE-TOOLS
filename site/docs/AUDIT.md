@@ -18,7 +18,7 @@ Audited all ten specifications, Python entry points and shared engine, native Ja
 ## Shared fixes
 
 - JavaScript CLI rejects empty output values, missing values followed by another flag, and values on boolean switches. Parsing respects `--`, literal values such as `--expect=--help`, decimal integer syntax, and hyphenated flag names.
-- Validate output parents and file types before writing an audio result. Detect output aliases through symlink parents as well as existing hard links; never overwrite an input.
+- Validate output parents and file types before writing an audio result. Detect output aliases through symlink parents as well as existing hard links; never overwrite an input. Both ports explicitly reject dangling output symlinks, including Windows where resolving a missing target alone does not detect aliases.
 - Limit CLI input files to 128 MiB combined (64 MiB per file); retain the browser's 64 MiB combined limit. Window/event limits produce actionable errors instead of unbounded reports.
 - Reject malformed WAV fmt extension lengths and single-byte partial extensions in both decoders.
 - Reduce JavaScript temporary copies and flattened channel arrays; preserve numerical parity.
