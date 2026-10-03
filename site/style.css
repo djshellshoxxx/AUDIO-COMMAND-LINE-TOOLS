@@ -4,3 +4,5 @@
 @media(max-width:500px){header{align-items:flex-start;gap:1rem;flex-direction:column}header nav{gap:1.25rem}.section-head{align-items:flex-start;flex-direction:column}.intro{padding-top:2rem}#tool-list button{font-size:12px}#tool-list button span{margin-right:.5rem}.panel{padding:1rem}.options{grid-template-columns:1fr 1fr;gap:.75rem}.summary{grid-template-columns:1fr 1fr}.download-grid{grid-template-columns:1fr}.lede{font-size:16px}h3{font-size:25px}.terminal code{font-size:12px}footer{gap:1rem}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 textarea{background:var(--bg);color:var(--text);border:1px solid var(--line);font:13px var(--mono);padding:.5rem;margin-top:.3rem;resize:vertical}
+.summary .metric:last-child:nth-child(3n+1){grid-column:1/-1}
+@media(max-width:500px){.summary .metric:last-child:nth-child(3n+1){grid-column:auto}.summary .metric:last-child:nth-child(2n+1){grid-column:1/-1}}

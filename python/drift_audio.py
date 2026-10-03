@@ -76,6 +76,8 @@ def decode_wav(b):
         x = np.frombuffer(payload, dtype='<i2' if bits == 16 else '<i4').astype(float) / (2 ** (bits-1))
     if not np.isfinite(x).all():
         raise ValueError('Nonfinite samples')
+    if np.max(np.abs(x)) > 1e6:
+        raise ValueError('Sample amplitude exceeds supported range (1e6)')
     return {'samples': x.reshape(-1, channels), 'rate': rate, 'bits': bits, 'encoding': code}
 
 def write_wav(path, x, rate, overwrite=False):
@@ -105,6 +107,7 @@ def analyze(tool, audio, o, names=None):
     rendered = None
     if tool == 'loopbudget':
         expected = round_half(o['bars'] * o['beats'] * 60 / o['bpm'] * rate)
+        if expected > 9007199254740991: raise ValueError('Expected loop frame count exceeds safe integer range')
         jump = np.abs(x[0] - x[-1])
         slope = np.abs((x[1]-x[0]) - (x[-1]-x[-2])) if n > 1 else np.zeros(channels)
         result.update(seam_jump_dbfs=[db(v) for v in jump], slope_mismatch_dbfs=[db(v) for v in slope], expected_frames=expected, frame_error=n-expected, implied_bpm=o['bars']*o['beats']*60*rate/n)
@@ -216,9 +219,11 @@ def validate(tool,o):
         value=o[key]
         if isinstance(value,(float,int)) and not math.isfinite(value):
             raise ValueError(key+' must be finite')
+        if isinstance(value,(float,int)) and abs(value)>1e9: raise ValueError(key+' magnitude cannot exceed 1e9')
     for key in ('window_ms','bpm','beats','bars','loss_db','min_ms','flank_ms','min_run','every_bars'):
         if key in FLAGS[tool] and o[key]<=0:
             raise ValueError(key+' must be positive')
+    if 'bpm' in FLAGS[tool] and o['bpm'] < .001: raise ValueError('bpm must be at least 0.001')
     for key in ('pad_ms','rate','channels','frames','offset_seconds'):
         if key in FLAGS[tool] and o[key]<0:
             raise ValueError(key+' cannot be negative')

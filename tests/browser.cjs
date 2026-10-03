@@ -28,11 +28,18 @@ const fs=require('node:fs');const os=require('node:os');const path=require('node
  // Explicit over-ceiling export: retain report, suppress WAV.
  await page.locator('[data-tool="gainbudget"]').click();await page.locator('#demo').click();await page.locator('#opt-gain_db').fill('30');await page.locator('#run').click();
  await page.waitForFunction(()=>document.querySelector('#status').textContent.startsWith('Analysis complete.'));assert.equal(await page.locator('#save-audio').isVisible(),false);assert.match(await page.locator('#status').textContent(),/exceeds ceiling/);
+ // Upload a real, known-length WAV through the file input.
+ const fixture=Buffer.alloc(44+4000*2);fixture.write('RIFF',0);fixture.writeUInt32LE(fixture.length-8,4);fixture.write('WAVEfmt ',8);fixture.writeUInt32LE(16,16);fixture.writeUInt16LE(1,20);fixture.writeUInt16LE(2,22);fixture.writeUInt32LE(1000,24);fixture.writeUInt32LE(4000,28);fixture.writeUInt16LE(4,32);fixture.writeUInt16LE(16,34);fixture.write('data',36);fixture.writeUInt32LE(8000,40);
+ await page.locator('[data-tool="loopbudget"]').click();await page.locator('#files').setInputFiles({name:'uploaded.wav',mimeType:'audio/wav',buffer:fixture});await page.locator('#run').click();await page.waitForFunction(()=>document.querySelector('#status').textContent.startsWith('Analysis complete.'));assert.equal(JSON.parse(await page.locator('#report').textContent()).frame_error,0);
+ for(const file of ['cdl-audio-python.zip','cdl-audio-javascript.zip']){const event=page.waitForEvent('download');await page.locator(`a[href="downloads/${file}"]`).click();const dl=await event;const tmp=path.join(os.tmpdir(),file);await dl.saveAs(tmp);const bytes=fs.readFileSync(tmp);assert.equal(bytes.subarray(0,2).toString(),'PK');assert.ok(bytes.length>20000);fs.unlinkSync(tmp);}
+ for(const name of names){const response=await page.request.get(new URL('spec/'+name+'.md',page.url()).href);assert.equal(response.status(),200);assert.match(await response.text(),/Pseudocode/);}
+ await page.reload();await page.waitForSelector('#tool-list button');await page.locator('body').evaluate(el=>{el.tabIndex=-1;el.focus();});await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.className),'skip');await page.keyboard.press('Enter');assert.match(page.url(),/#workbench$/);
  // Keyboard and viewport geometry.
  for(const width of [320,768,1024,1440]){
   await page.setViewportSize({width,height:1000});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`Overflow at ${width}`);
  }
  await page.setViewportSize({width:1440,height:1100});await page.locator('[data-tool="loopbudget"]').click();await page.locator('#demo').click();await page.locator('#run').click();await page.waitForFunction(()=>document.querySelector('#status').textContent.startsWith('Analysis complete.'));
+ await page.locator('#tool-title').evaluate(el=>{el.tabIndex=-1;el.focus();});
  if(process.env.CDL_SCREENSHOT)await page.screenshot({path:process.env.CDL_SCREENSHOT,fullPage:true});
  assert.deepEqual(errors,[]);console.log('PASS: 10 browser tools, report/WAV downloads, input errors, ceiling protection, stale-result reset, and 4 viewport widths.');await browser.close();
 })().catch(e=>{console.error(e);process.exit(1);});

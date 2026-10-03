@@ -11,10 +11,12 @@ export function options(tool, supplied={}) {
     if(key==='expect') {if(!Array.isArray(o[key]) || o[key].some(v=>typeof v!=='string')) throw Error('expect must be a list of basenames'); continue;}
     if(key==='require_active') {if(typeof o[key]!=='boolean') throw Error('require-active must be boolean'); continue;}
     if(!Number.isFinite(o[key])) throw Error(key+' must be finite');
+    if(Math.abs(o[key])>1e9)throw Error(key+' magnitude cannot exceed 1e9');
     if(['beats','bars','min_run','rate','channels','frames','every_bars','offset_frames'].includes(key) && !Number.isInteger(o[key])) throw Error(key+' must be an integer');
     if(['window_ms','bpm','beats','bars','loss_db','min_ms','flank_ms','min_run','every_bars'].includes(key) && o[key]<=0) throw Error(key+' must be positive');
     if(['pad_ms','rate','channels','frames','offset_seconds'].includes(key) && o[key]<0) throw Error(key+' cannot be negative');
   }
+  if(flags[tool].includes('bpm') && o.bpm<.001)throw Error('bpm must be at least 0.001');
   if(flags[tool].includes('threshold_db') && (o.threshold_db < -240 || o.threshold_db>0)) throw Error('threshold-db must be between -240 and 0');
   if(tool==='gainbudget' && (o.gain_db < -120 || o.gain_db>120 || o.ceiling_db < -120 || o.ceiling_db>0)) throw Error('gain-db range is -120..120; ceiling-db range is -120..0');
   return o;
@@ -63,7 +65,7 @@ export function decodeWav(buffer) {
     else if(bits===16) z=v.getInt16(p,true)/32768;
     else if(bits===32) z=v.getInt32(p,true)/2147483648;
     else {let t=v.getUint8(p)|(v.getUint8(p+1)<<8)|(v.getUint8(p+2)<<16);if(t&0x800000)t-=0x1000000;z=t/8388608;}
-    if(!Number.isFinite(z)) throw Error('Nonfinite samples'); x[c][i]=z;
+    if(!Number.isFinite(z)) throw Error('Nonfinite samples');if(Math.abs(z)>1e6)throw Error('Sample amplitude exceeds supported range (1e6)');x[c][i]=z;
   }
   return {samples:x,rate,bits,encoding};
 }
@@ -83,7 +85,7 @@ export function analyze(tool,audio,supplied={},names=[]) {
   const result={tool,sample_rate:rate,frames:n,channels,duration_seconds:n/rate};let rendered=null;
   const blocks=function*(z) {for(let s=0;s<z[0].length;s+=win)yield [s,z.map(c=>Array.from(c.slice(s,s+win)))];};
   if(tool==='loopbudget') {
-    const expected=round(o.bars*o.beats*60/o.bpm*rate);
+    const expected=round(o.bars*o.beats*60/o.bpm*rate);if(!Number.isSafeInteger(expected))throw Error('Expected loop frame count exceeds safe integer range');
     Object.assign(result,{seam_jump_dbfs:x.map(c=>db(Math.abs(c[0]-c[n-1]))),slope_mismatch_dbfs:x.map(c=>db(n>1?Math.abs((c[1]-c[0])-(c[n-1]-c[n-2])):0)),expected_frames:expected,frame_error:n-expected,implied_bpm:o.bars*o.beats*60*rate/n});
   } else if(tool==='tailbudget') {
     let last=0;for(let i=0;i<n;i++)if(x.some(c=>Math.abs(c[i])>threshold))last=i+1;

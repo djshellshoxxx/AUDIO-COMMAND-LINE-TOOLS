@@ -216,6 +216,13 @@ class ToolsTest(unittest.TestCase):
         else:self.skipTest('No compatible shell')
         for command in commands:
             r=subprocess.run(command,capture_output=True,text=True);self.assertEqual(r.returncode,0,r.stderr);self.assertEqual(json.loads(r.stdout)['frame_error'],0)
+    def test_pathological_numeric_values(self):
+        for js in (False,True):
+            for args in [('--bpm','1e-300'),('--bars','100000000000'),('--bpm','.001','--bars','1000000000','--beats','1000000000')]:
+                r=self.cli('loopbudget',self.p/'a.wav',*args,js=js);self.assertEqual(r.returncode,2,r.stdout)
+        payload=struct.pack('<dd',1e300,0);body=b'WAVEfmt '+struct.pack('<IHHIIHH',16,3,1,1000,8000,8,64)+b'data'+struct.pack('<I',len(payload))+payload
+        f=self.p/'extreme.wav';f.write_bytes(b'RIFF'+struct.pack('<I',len(body))+body)
+        for js in (False,True):self.assertEqual(self.cli('gainbudget',f,js=js).returncode,2)
     def test_above_fullscale_export_rejected(self):
         with self.assertRaises(ValueError):write_wav(self.p/'bad.wav',np.ones((2,1))*1.1,1000)
     def test_ancillary_odd_chunk(self):
