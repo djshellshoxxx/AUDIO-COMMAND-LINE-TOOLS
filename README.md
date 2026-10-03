@@ -1,8 +1,10 @@
 # Audio Command Line Tools
 
-Ten focused audio utilities from **Circuit Drift Labs**. Run them in Python, Node, or the browser. Every tool includes a spec with pseudocode, JSON reports, adjustable flags, and synthetic regression tests.
+Ten focused Python/JavaScript audio utilities plus seven **Beta shell-native FFmpeg/FFprobe QC tools** from **Circuit Drift Labs**. The original tools run in Python, Node, or the browser. The new Bash and PowerShell tools are independent shell implementations that orchestrate FFmpeg/FFprobe directly; they do not call the repository's Python or JavaScript DSP engines.
 
 **[Open the browser workbench](https://djshellshoxxx.github.io/AUDIO-COMMAND-LINE-TOOLS/)** · [Circuit Drift Labs](https://djshellshoxxx.github.io/circuitdriftlabs/) · [Research and existing alternatives](docs/RESEARCH.md) · [Program audit](docs/AUDIT.md)
+
+## Original Python / JavaScript tools
 
 | Tool | What it does | Useful controls / output |
 |---|---|---|
@@ -19,6 +21,47 @@ Ten focused audio utilities from **Circuit Drift Labs**. Run them in Python, Nod
 
 These are useful combinations of established audio techniques. Related tools already exist; the research does not establish that every workflow is unprecedented. No trained models or external audio services are used.
 
+## Shell-native FFmpeg/FFprobe tools (Beta)
+
+These seven tools live in `bash/` and `powershell/`. Bash requires Bash 4.4+; PowerShell requires PowerShell 7+. Both require `ffmpeg` and `ffprobe` on `PATH`.
+
+| Tool | Gap it targets | Main evidence / output |
+|---|---|---|
+| [stereotruth](spec/stereotruth.md) | Stereo files that may actually be dual-mono, polarity-inverted or imbalanced | Phase/correlation proportions, per-channel RMS, review findings |
+| [loudwalk](spec/loudwalk.md) | Raw EBU R128 logs are awkward for locating unusual sections | Short-term LUFS timeline, median, abrupt jumps, relative outliers |
+| [formattruth](spec/formattruth.md) | Extensions/containers/codecs/stream metadata can disagree | Normalized FFprobe facts, extension/container and stream findings |
+| [albumcontract](spec/albumcontract.md) | One or two accidental outliers inside a delivery folder | Dominant/expected sample rate, channels and sample format; outlier ledger |
+| [phasewatch](spec/phasewatch.md) | Whole-file correlation hides brief stereo phase changes | Timestamped correlation ledger and regime-change candidates |
+| [batchsilence](spec/batchsilence.md) | Large exports need comparative leading/trailing silence QC | Per-file silence seconds/ratios and configurable limit findings |
+| [transcodeaudit](spec/transcodeaudit.md) | Libraries need quick technical triage without false provenance claims | Codec/container/bitrate/encoder ledger and review heuristics |
+
+Install FFmpeg on Debian/Ubuntu:
+
+```sh
+sudo apt update
+sudo apt install ffmpeg
+```
+
+On Windows, install a current FFmpeg build and ensure both `ffmpeg.exe` and `ffprobe.exe` are on `PATH` (for example with `winget install Gyan.FFmpeg`).
+
+Examples:
+
+```sh
+bash bash/stereotruth.sh mix.wav --json
+bash bash/loudwalk.sh master.wav --jump-db 4 --deviation-db 7
+bash bash/albumcontract.sh exports --recursive --expected-rate 48000 --expected-channels 2 --json
+bash bash/batchsilence.sh exports --max-leading 1.0 --max-trailing 2.0 --json
+```
+
+```powershell
+./powershell/stereotruth.ps1 mix.wav -Json
+./powershell/loudwalk.ps1 master.wav -JumpDb 4 -DeviationDb 7 -Json
+./powershell/albumcontract.ps1 exports -Recursive -ExpectedRate 48000 -ExpectedChannels 2 -Json
+./powershell/batchsilence.ps1 exports -MaxLeading 1.0 -MaxTrailing 2.0 -Json
+```
+
+Shell-native JSON reports contain the tool/version, UTC generation time, input paths, FFmpeg/FFprobe versions, effective options, measurements, findings and a final `status`. Their exit codes are **0** = completed with no policy findings, **1** = completed with review findings, **2** = invalid arguments/dependency/input/analysis/report failure. They never modify source audio.
+
 ## Run Python
 
 Python 3.10+ and NumPy. From a checkout:
@@ -32,7 +75,7 @@ python python/renderdelta.py A.wav B.wav --offset-frames 12 --audio-out residual
 python python/drift_audio.py cueclock song.wav --bpm 123 --every-bars 8
 ```
 
-The Python ZIP places the entry scripts and shared engine in the same folder. Run `python loopbudget.py ...` there. Keep `drift_audio.py` alongside every entry script. Bash, PowerShell, and batch files are **launchers**, not independent DSP ports:
+The Python ZIP places the entry scripts and shared engine in the same folder. Run `python loopbudget.py ...` there. Keep `drift_audio.py` alongside every entry script. The files under `python/` named `drift-audio.sh`, `drift-audio.ps1`, and `drift-audio.cmd` are launchers for the Python engine; they are separate from the independent tools under top-level `bash/` and `powershell/`.
 
 ```sh
 bash python/drift-audio.sh loopbudget loop.wav --bpm 127
@@ -60,17 +103,9 @@ The JavaScript ZIP places all modules in one folder. Keep `engine.mjs` and `cli.
 
 ## Inputs and outputs
 
-Supported: little-endian RIFF WAV PCM 8/16/24/32-bit or IEEE float 32/64-bit, 1–32 channels, 1–384000 Hz, maximum 64 MiB per file. CLI inputs are limited to 128 MiB combined. Browser uploads are also limited to 64 MiB total. MP3, FLAC and compressed WAV are rejected explicitly. Extensible PCM/float WAV is supported when valid bits equal container bits. Convert to ordinary PCM WAV externally, for example with FFmpeg:
+The original Python/JavaScript/browser engine supports little-endian RIFF WAV PCM 8/16/24/32-bit or IEEE float 32/64-bit, 1–32 channels, 1–384000 Hz, maximum 64 MiB per file. CLI inputs are limited to 128 MiB combined. Browser uploads are also limited to 64 MiB total. MP3, FLAC and compressed WAV are rejected explicitly by that engine. Extensible PCM/float WAV is supported when valid bits equal container bits.
 
-```sh
-ffmpeg -i input.flac -c:a pcm_s24le input.wav
-```
-
-Reports are JSON on stdout unless `--output` is given. Each script supports `--help` with flag descriptions and defaults. Windowed analyses and event reports are capped at 100000 windows/entries; increase window/run/gap sizes or split the input if needed. Timeline ends are exclusive. Decibel silence floor is -240 dB. `--audio-out` is supported by tailbudget, monoledger, dcjourney, gainbudget, and renderdelta. Exports are 16-bit PCM with original sample rate, without metadata or dithering. Original files cannot be overwritten, even with `--overwrite`.
-
-Measurements are sample peaks and RMS, not true peaks or LUFS. Gap and rail events are evidence to inspect, not proof of a recording fault. Renderdelta uses a user-supplied offset and reports only overlapping samples plus unmatched frame counts; it does not automatically align or resample. DCjourney removes global means only when exporting.
-
-Exit codes: **0** finished; **1** stem contract failed; **2** input, flag, or I/O error. Other tools leave threshold decisions to the user. Above-full-scale audio exports fail instead of clipping. Gain exports additionally require the requested ceiling to be met, including after PCM rounding. Very low ceilings below one PCM step can yield silence.
+The shell-native tools accept formats that the installed FFmpeg build can decode. Their findings are evidence to inspect, not proof of corruption, mastering error or encoding provenance. `transcodeaudit` explicitly cannot prove lossy-to-lossless history, and correlation tools cannot determine the artistic intent behind stereo phase relationships.
 
 ## Verify and build
 
@@ -80,6 +115,6 @@ python scripts/package.py
 python -m http.server 8000 --directory site
 ```
 
-Then open `http://localhost:8000`. Serve over HTTP(S); opening `index.html` as a local file will block ES modules/workers. `tests/browser.cjs` tests all ten browser flows with Playwright after starting the server and installing Playwright/Chromium. GitHub Actions runs Python/Node parity tests on Linux, Windows and macOS, then deploys the site through GitHub Pages.
+For the shell-native tools, ensure FFmpeg/FFprobe are installed before running the suite. PowerShell parity tests run when `pwsh` is available. GitHub Actions exercises Bash on Ubuntu and PowerShell on Ubuntu and Windows in addition to the existing Python/Node/browser checks.
 
 License: MIT. Research links describe alternatives and underlying methods; no third-party source code or audio is copied.
