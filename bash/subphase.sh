@@ -30,6 +30,19 @@ fi
 od -An -v -t d2 -- "$pcm" | awk -v rate="$rate" -v frames="$frames" -v active="$ACTIVE" -v weak="$WEAK" -v neg="$NEG" -v crit="$CRIT" -v minms="$MINRUN" -v imbal="$IMBAL" -v ev="$events" '
 function db(s,n){return (!n||s<=0)?-240:20*log(sqrt(s/n)/32768)/log(10)}
 function emit(kind,st,en,sev,det){printf "%s\t%.6f\t%.6f\t%s\t%s\n",kind,st,en,sev,det >> ev}
-{for(i=1;i<=NF;i++){v=$i; if(chan==0){L=v;chan=1}else{R=v;idx++;w=int((idx-1)/frames); sl[w]+=L;sr[w]+=R;sll[w]+=L*L;srr[w]+=R*R;slr[w]+=L*R;n[w]++;chan=0}}}
-END{for(w=0;w<=int((idx-1)/frames);w++){if(!n[w])continue;lmean=sl[w]/n[w];rmean=sr[w]/n[w];cov=slr[w]-n[w]*lmean*rmean;vl=sll[w]-n[w]*lmean*lmean;vr=srr[w]-n[w]*rmean*rmean;lrms=db(sll[w],n[w]);rrms=db(srr[w],n[w]);ar=(lrms>rrms?lrms:rrms);if(ar<active)continue;corr=(vl>0&&vr>0)?cov/sqrt(vl*vr):1;bal=lrms-rrms;if(bal<0)bal=-bal;st=w*frames/rate;en=(w*frames+n[w])/rate;kind="";if(corr<=crit)kind="critical_sub_correlation";else if(corr<neg)kind="negative_sub_correlation";else if(corr<weak)kind="weak_sub_correlation";if(kind!="")emit(kind,st,en,"review",sprintf("correlation=%.6f",corr));if(bal>=imbal)emit("sub_balance_imbalance",st,en,"review",sprintf("imbalance_db=%.3f",bal));}}'
+function flushrun( dur){if(runKind==""||runN==0)return;dur=(runEnd-runStart)*1000;if(dur+0.0001>=minms){emit(runKind,runStart,runEnd,"review",sprintf("minimum_correlation=%.6f,windows=%d",runMin,runN));emit("sub_phase_regime_change",runStart,runEnd,"review",sprintf("entered=%s",runKind))}runKind="";runN=0}
+{for(i=1;i<=NF;i++){v=$i;if(chan==0){L=v;chan=1}else{R=v;idx++;w=int((idx-1)/frames);sl[w]+=L;sr[w]+=R;sll[w]+=L*L;srr[w]+=R*R;slr[w]+=L*R;n[w]++;chan=0}}}
+END{
+ maxw=int((idx-1)/frames);
+ for(w=0;w<=maxw;w++){
+  if(!n[w]){flushrun();continue}
+  lmean=sl[w]/n[w];rmean=sr[w]/n[w];cov=slr[w]-n[w]*lmean*rmean;vl=sll[w]-n[w]*lmean*lmean;vr=srr[w]-n[w]*rmean*rmean;lrms=db(sll[w],n[w]);rrms=db(srr[w],n[w]);ar=(lrms>rrms?lrms:rrms);st=w*frames/rate;en=(w*frames+n[w])/rate;
+  if(ar<active){flushrun();continue}
+  corr=(vl>0&&vr>0)?cov/sqrt(vl*vr):1;bal=lrms-rrms;if(bal<0)bal=-bal;if(bal>=imbal)emit("sub_balance_imbalance",st,en,"review",sprintf("imbalance_db=%.3f",bal));
+  kind="";if(corr<=crit)kind="critical_sub_correlation";else if(corr<neg)kind="negative_sub_correlation";else if(corr<weak)kind="weak_sub_correlation";
+  if(kind==""){flushrun();continue}
+  if(runKind==kind && st<=runEnd+0.000001){runEnd=en;runN++;if(corr<runMin)runMin=corr}else{flushrun();runKind=kind;runStart=st;runEnd=en;runN=1;runMin=corr}
+ }
+ flushrun()
+}'
 review=0;grep -q $'\treview\t' "$events"&&review=1||true;status=$([[ $review == 1 ]]&&echo review||echo ok);report_render "$TOOL" "$input" "$events" "$status" "$OUTPUT" "$FORMAT" "$NO_HEADER" "$QUIET"||die "failed to write report";((review))&&exit 1||exit 0
