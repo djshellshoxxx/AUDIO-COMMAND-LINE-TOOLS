@@ -63,8 +63,26 @@ def write_wav(path: str | Path, x: np.ndarray, rate: int, overwrite: bool=False)
         w.setnchannels(x.shape[1]); w.setsampwidth(2); w.setframerate(rate)
         w.writeframes(q.tobytes())
 
+def require_finite(name: str, value: float) -> float:
+    value = float(value)
+    if not math.isfinite(value):
+        raise ValueError(f"{name} must be finite")
+    return value
+
 def db_to_amp(db: float) -> float:
-    return 10.0 ** (float(db) / 20.0)
+    db = require_finite("threshold_db", db)
+    return 10.0 ** (db / 20.0)
+
+def safe_output_path(root: str | Path, output_root: str | Path, relative: str | Path) -> Path:
+    source_root = Path(root).resolve()
+    output_root = Path(output_root).resolve()
+    candidate = output_root / relative
+    resolved = candidate.resolve()
+    if resolved == source_root or source_root in resolved.parents:
+        raise ValueError("Output path resolves into the input tree")
+    if resolved != output_root and output_root not in resolved.parents:
+        raise ValueError("Output path escapes the output tree through a symlink")
+    return candidate
 
 def validate_output_tree(root: str | Path, output_dir: str | Path | None) -> Path | None:
     if output_dir is None:
@@ -76,6 +94,8 @@ def validate_output_tree(root: str | Path, output_dir: str | Path | None) -> Pat
     return out
 
 def analyze_onset(path: str | Path, threshold_db: float=-30.0, preroll_ms: float=10.0) -> dict:
+    threshold_db = require_finite("threshold_db", threshold_db)
+    preroll_ms = require_finite("preroll_ms", preroll_ms)
     if preroll_ms < 0:
         raise ValueError("preroll_ms must be >= 0")
     x, rate = read_wav(path)
@@ -102,27 +122,32 @@ def onsetpack(root: str | Path, output_dir: str | Path | None=None, threshold_db
         if out_root is not None:
             x, rate = read_wav(p)
             rel = p.relative_to(root)
-            write_wav(out_root/rel, x[r["trim_start_frame"]:], rate, overwrite)
+            write_wav(safe_output_path(root, out_root, rel), x[r["trim_start_frame"]:], rate, overwrite)
     return {"tool":"onsetpack","beta":True,"root":str(root),"files":rows}
 
 def _mono(x: np.ndarray) -> np.ndarray:
     return np.mean(x, axis=1)
 
 def compare_phase(reference: str | Path, target: str | Path, max_shift_ms: float=10.0) -> dict:
+    max_shift_ms = require_finite("max_shift_ms", max_shift_ms)
     if max_shift_ms < 0:
         raise ValueError("max_shift_ms must be >= 0")
     a, ra = read_wav(reference); b, rb = read_wav(target)
     if ra != rb:
         raise ValueError("Sample rates must match")
     am, bm = _mono(a), _mono(b)
-    max_shift = max(0, int(round(max_shift_ms * ra / 1000.0)))
+    requested_shift = max(0, int(round(max_shift_ms * ra / 1000.0)))
+    negative_shift = min(requested_shift, max(0, len(am) - 2))
+    positive_shift = min(requested_shift, max(0, len(bm) - 2))
     best = None
-    for delay in range(-max_shift, max_shift+1):
+    for delay in range(-negative_shift, positive_shift + 1):
         if delay >= 0:
-            aa, bb = am[:min(len(am), len(bm)-delay)], bm[delay:delay+min(len(am), len(bm)-delay)]
+            count=min(len(am), len(bm)-delay)
+            aa, bb = am[:count], bm[delay:delay+count]
         else:
             d=-delay
-            aa, bb = am[d:d+min(len(am)-d, len(bm))], bm[:min(len(am)-d, len(bm))]
+            count=min(len(am)-d, len(bm))
+            aa, bb = am[d:d+count], bm[:count]
         if len(aa) < 2: continue
         aa = aa - np.mean(aa); bb = bb - np.mean(bb)
         denom = math.sqrt(float(np.dot(aa,aa)*np.dot(bb,bb)))
@@ -168,7 +193,7 @@ def phasebatch(root: str | Path, reference: str | Path, output_dir: str | Path |
             x, rate=read_wav(p)
             if rate != ref_rate: raise ValueError("Sample rates must match")
             fixed=_align_target(x,r["delay_frames"],r["polarity_inverted"],len(ref_x))
-            write_wav(out_root/p.relative_to(root),fixed,rate,overwrite)
+            write_wav(safe_output_path(root, out_root, p.relative_to(root)),fixed,rate,overwrite)
     return {"tool":"phasebatch","beta":True,"reference":str(ref),"comparisons":rows}
 
 def decoded_hash_array(x: np.ndarray, rate: int) -> str:
@@ -204,7 +229,8 @@ def diff_packs(old_root: str | Path, new_root: str | Path) -> dict:
             (unchanged if old[name]["hash"]==new[name]["hash"] else modified).append(name)
         elif name in old: removed.append(name)
         else: added.append(name)
-    old_by_hash={}; new_by_hash={}
+    old_by_hash={}
+    new_by_hash={}
     for n,m in old.items(): old_by_hash.setdefault(m["hash"],[]).append(n)
     for n,m in new.items(): new_by_hash.setdefault(m["hash"],[]).append(n)
     renamed=[]; used_old=set(); used_new=set()
@@ -232,6 +258,7 @@ def diff_packs(old_root: str | Path, new_root: str | Path) -> dict:
             "duplicates_old":_duplicates(old),"duplicates_new":_duplicates(new)}
 
 def analyze_edges(path: str | Path, threshold_db: float=-45.0) -> dict:
+    threshold_db = require_finite("threshold_db", threshold_db)
     x, rate=read_wav(path); threshold=db_to_amp(threshold_db)
     start_peak=float(np.max(np.abs(x[0]))); end_peak=float(np.max(np.abs(x[-1])))
     start_slope=float(np.max(np.abs(x[min(1,len(x)-1)]-x[0]))) if len(x)>1 else 0.0
@@ -244,8 +271,11 @@ def analyze_edges(path: str | Path, threshold_db: float=-45.0) -> dict:
             "threshold_db":threshold_db}
 
 def repair_edges(path: str | Path, output: str | Path, fade_ms: float=5.0, overwrite: bool=False) -> dict:
-    if fade_ms < 0:
-        raise ValueError("fade_ms must be >= 0")
+    fade_ms = require_finite("fade_ms", fade_ms)
+    if fade_ms <= 0:
+        raise ValueError("fade_ms must be > 0")
+    if Path(path).resolve() == Path(output).resolve():
+        raise ValueError("Output must not replace the source file")
     x, rate=read_wav(path); y=x.copy()
     n=max(1,int(round(fade_ms*rate/1000.0))); n=min(n,len(y))
     ramp=np.linspace(0.0,1.0,n,endpoint=True)
@@ -262,10 +292,12 @@ def edgeguard(root: str | Path, output_dir: str | Path | None=None, threshold_db
     for p in scan_wavs(root):
         r=analyze_edges(p,threshold_db); rows.append(r)
         if repair and (r["start_risk"] or r["end_risk"]):
-            repair_edges(p,out_root/p.relative_to(root),fade_ms,overwrite)
+            repair_edges(p,safe_output_path(root, out_root, p.relative_to(root)),fade_ms,overwrite)
     return {"tool":"edgeguard","beta":True,"root":str(root),"files":rows}
 
 def write_report(report: dict, output: str | Path | None, csv_output: str | Path | None=None, overwrite: bool=False) -> None:
+    if output and csv_output and Path(output).resolve() == Path(csv_output).resolve():
+        raise ValueError("JSON and CSV outputs must use different paths")
     text=json.dumps(report,indent=2,sort_keys=True)
     if output:
         p=Path(output)
