@@ -45,7 +45,7 @@ jobs:
       - name: ShellCheck
         run: shellcheck -x -e SC1091 bash/*.sh bash/lib/*.sh
       - name: Bash regression suite
-        run: python -m unittest tests.test_bash_pipeline_tools tests.test_bash_site -v
+        run: python -m unittest tests.test_bash_pipeline_tools tests.test_bash_audit tests.test_bash_site -v
       - name: Build bundles
         run: python scripts/package.py
   browser:
