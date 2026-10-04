@@ -8,7 +8,7 @@ EOF
 }
 json=0; rec=0; loud=0; er=""; ec=""; output=""; input=""
 while (($#)); do case "$1" in --help|-h) help; exit 0;; --json) json=1;; --recursive) rec=1;; --loudness) loud=1;; --expected-rate) shift; (($#))||die 'missing --expected-rate value'; er=$1; [[ $er =~ ^[1-9][0-9]*$ ]]||die 'invalid --expected-rate';; --expected-channels) shift; (($#))||die 'missing --expected-channels value'; ec=$1; [[ $ec =~ ^[1-9][0-9]*$ ]]||die 'invalid --expected-channels';; --output) shift; (($#))||die 'missing --output value'; output=$1;; --*) die "unknown option: $1";; *) [[ -z "$input" ]]||die 'one directory only'; input=$1;; esac; shift; done
-[[ -n "$input" ]]||die 'directory required'; require_tools; need_dir "$input"; files=(); while IFS= read -r -d '' f; do files+=("$f"); done < <(find_audio_files "$input" "$rec"); ((${#files[@]}))||die 'no supported audio files'
+[[ -n "$input" ]]||die 'directory required'; require_tools; need_dir "$input"; files=(); while IFS= read -r -d '' f; do files+=("$f"); done < <(find_audio_files "$input" "$rec"); ((${#files[@]}))||die 'no supported audio files'; validate_report_target "$output" "${files[@]}"
 rates=(); chans=(); fmts=(); for f in "${files[@]}"; do rates+=("$(probe_value "$f" sample_rate)"); chans+=("$(probe_value "$f" channels)"); fmts+=("$(probe_value "$f" sample_fmt)"); done
 mode(){ printf '%s\n' "$@"|sort|uniq -c|sort -k1,1nr -k2,2|awk 'NR==1{$1="";sub(/^ /,"");print;exit}'; }
 dr=${er:-$(mode "${rates[@]}")}; dc=${ec:-$(mode "${chans[@]}")}; df=$(mode "${fmts[@]}")
