@@ -1,6 +1,22 @@
 import json, os, pathlib, shutil, subprocess, tempfile, unittest
 ROOT=pathlib.Path(__file__).resolve().parents[1]; BASH=ROOT/'bash'; POWERSHELL=ROOT/'powershell'
 TOOLS=['formattruth','transcodeaudit','batchsilence','albumcontract','loudwalk','stereotruth','phasewatch']
+DEFERRED_BASH={
+ 'formattruth':['--strict-extension','--tags'],
+ 'transcodeaudit':['--show-tags'],
+ 'albumcontract':['--loudness-tolerance-db'],
+ 'loudwalk':['--top','--interval'],
+ 'stereotruth':['--delay-search-ms','--window-ms','--min-active-db'],
+ 'phasewatch':['--warn-correlation','--min-duration-ms','--window-ms','--min-active-db'],
+}
+DEFERRED_PS={
+ 'formattruth':['-StrictExtension','-Tags'],
+ 'transcodeaudit':['-ShowTags'],
+ 'albumcontract':['-LoudnessToleranceDb'],
+ 'loudwalk':['-Top','-Interval'],
+ 'stereotruth':['-DelaySearchMs','-WindowMs','-MinActiveDb'],
+ 'phasewatch':['-WarnCorrelation','-MinDurationMs','-WindowMs','-MinActiveDb'],
+}
 class T(unittest.TestCase):
  @classmethod
  def setUpClass(c):
@@ -37,6 +53,19 @@ class T(unittest.TestCase):
   d=self.js(self.run_tool('stereotruth',self.stereo,'--json')); self.assertIn('dual_mono_candidate',{x['category'] for x in d['findings']})
  def test_phasewatch(self):
   d=self.js(self.run_tool('phasewatch',self.stereo,'--json')); self.assertIn('windows',d['measurements'])
+ def test_output_json_file(self):
+  out=self.d/'report output.json'; self.run_tool('formattruth',self.stereo,'--json','--output',out); self.assertEqual(json.loads(out.read_text())['tool'],'formattruth')
+ def test_bash_invalid_numeric_options_exit_2(self):
+  cases=[('stereotruth',(self.stereo,'--imbalance-db','nope')),('loudwalk',(self.stereo,'--jump-db','nope')),('phasewatch',(self.stereo,'--critical-correlation','2')),('batchsilence',(self.d,'--min-silence','0')),('albumcontract',(self.d,'--expected-rate','0')),('transcodeaudit',(self.d,'--min-bitrate','-1'))]
+  for tool,args in cases:
+   with self.subTest(tool=tool): self.run_tool(tool,*args,exp=(2,))
+ def test_deferred_bash_options_are_rejected(self):
+  for tool,flags in DEFERRED_BASH.items():
+   target=self.d if tool in {'albumcontract','transcodeaudit'} else self.stereo
+   for flag in flags:
+    with self.subTest(tool=tool,flag=flag):
+     args=(target,flag,'1') if flag not in {'--strict-extension','--show-tags'} else (target,flag)
+     self.run_tool(tool,*args,exp=(2,))
  def test_powershell_help(self):
   for t in TOOLS:self.run_ps(t,'-Help',exp=(0,))
  def test_powershell_formattruth_native(self):
@@ -53,6 +82,15 @@ class T(unittest.TestCase):
   p=self.js(self.run_ps('stereotruth',self.stereo,'-Json')); self.assertIn('dual_mono_candidate',{x['category'] for x in p['findings']})
  def test_powershell_phasewatch_native(self):
   p=self.js(self.run_ps('phasewatch',self.stereo,'-Json')); self.assertEqual(p['tool'],'phasewatch'); self.assertIn('windows',p['measurements']); self.assertGreater(len(p['measurements']['windows']),0)
+ def test_deferred_powershell_options_are_rejected(self):
+  if not shutil.which('pwsh'): self.skipTest('pwsh not installed')
+  for tool,flags in DEFERRED_PS.items():
+   target=self.d if tool in {'albumcontract','transcodeaudit'} else self.stereo
+   for flag in flags:
+    with self.subTest(tool=tool,flag=flag):
+     args=[str(target),flag]
+     if flag not in {'-StrictExtension','-ShowTags'}:args.append('1')
+     cp=subprocess.run(['pwsh','-NoProfile','-File',str(POWERSHELL/(tool+'.ps1')),*args],text=True,capture_output=True); self.assertNotEqual(cp.returncode,0)
  def test_powershell_formattruth_parity(self):
   if os.name=='nt': self.skipTest('cross-shell parity runs on Linux')
   b=self.js(self.run_tool('formattruth',self.stereo,'--json')); p=self.js(self.run_ps('formattruth',self.stereo,'-Json')); self.assertEqual(b['measurements']['channels'],p['measurements']['channels']); self.assertEqual(b['measurements']['sample_rate'],p['measurements']['sample_rate'])

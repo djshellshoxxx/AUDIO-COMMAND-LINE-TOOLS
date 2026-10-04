@@ -1,43 +1,33 @@
 # stereotruth (Beta)
 
-`stereotruth` audits stereo files for relationships that are easy to miss in a normal metadata dump: near-identical channels, sustained negative correlation, and channel-level imbalance. It is an evidence tool, not a mastering diagnosis.
-
-## Dependencies
-
-Runtime: FFmpeg, FFprobe, plus Bash 4.4+ for `bash/stereotruth.sh` or PowerShell 7+ for `powershell/stereotruth.ps1`.
+`stereotruth` looks for stereo files whose channel relationship suggests dual-mono content, sustained polarity inversion, or a large left/right RMS imbalance.
 
 ## Usage
 
 ```bash
 bash bash/stereotruth.sh mix.wav --json
-bash bash/stereotruth.sh mix.wav --dual-mono-correlation 0.998 --imbalance-db 2 --output stereo.json
+bash bash/stereotruth.sh mix.wav --dual-mono-correlation 0.998 --negative-correlation -0.95 --imbalance-db 2.5 --json
 ```
 
 ```powershell
 ./powershell/stereotruth.ps1 mix.wav -Json
-./powershell/stereotruth.ps1 mix.wav -DualMonoCorrelation 0.998 -ImbalanceDb 2 -Output stereo.json
+./powershell/stereotruth.ps1 mix.wav -DualMonoCorrelation 0.998 -NegativeCorrelation -0.95 -ImbalanceDb 2.5 -Json
 ```
-
-Important controls are the dual-mono correlation threshold, negative-correlation threshold, imbalance threshold, nominal window size, minimum-active level and delay-search bound. Version 0.1 reports the configured delay-search bound but does not claim an automatic delay estimate.
 
 ## Internals
 
-The script first asks FFprobe for the decoded channel count and rejects anything except two channels. FFmpeg then runs `aphasemeter=video=0` and prints the `lavfi.aphasemeter.phase` frame metadata. Those values form the correlation timeline used to calculate mean correlation, the proportion of windows at or above the dual-mono threshold, and the proportion at or below the negative-correlation threshold.
+FFmpeg's `aphasemeter` metadata supplies a stream of stereo phase/correlation values. The scripts count windows that meet the configured high-correlation and negative-correlation thresholds. FFmpeg `astats` supplies left/right RMS levels and the scripts compare their absolute dB difference against `imbalance-db`.
 
-A second FFmpeg pass runs `astats=metadata=1` and prints per-channel RMS metadata. The scripts calculate the absolute difference between left and right RMS levels. Bash performs only aggregation and threshold comparisons with `awk`; PowerShell performs the same aggregation with .NET numeric types. FFmpeg remains the DSP engine in both versions.
+Findings are `dual_mono_candidate`, `polarity_inversion_candidate`, and `channel_imbalance`. Source audio is never modified.
 
-Default findings are conservative. A `dual_mono_candidate` is emitted only when at least 90% of measured phase windows meet the configured near-unity threshold. A `polarity_inversion_candidate` requires at least half the measured windows to be strongly negative. `channel_imbalance` compares the RMS difference with the configured dB limit.
+## Output and exits
 
-## JSON
+JSON reports the correlation ratios, mean correlation, left/right RMS values, RMS balance, effective thresholds and findings. Exit `0` means no findings, `1` means review findings exist, and `2` means analysis could not be completed.
 
-Reports contain `tool`, `version`, `generated_utc`, dependency versions, effective options, measurements, findings and `status`. Finding categories are stable machine-readable strings. Status is `review` when a finding is present and `ok` otherwise.
+## v0.1 scope
 
-## Exit codes
-
-- `0`: analysis completed with no findings
-- `1`: analysis completed and one or more review findings were produced
-- `2`: invalid arguments, missing dependencies, unreadable input, non-stereo input or FFmpeg/FFprobe failure
+Draft controls for custom window size, delay search and activity gating were removed from the v0.1 Beta CLI because those values were previously recorded but did not alter the DSP path. They will only return if implemented and regression-tested.
 
 ## Limitations
 
-Correlation is not a complete mono-compatibility test. Highly correlated stereo may be intentional. Negative correlation may be an intentional spatial effect. RMS imbalance may be musically correct. Silence and extremely quiet material can make correlation less useful, so findings should be verified in context. The tool does not prove wiring faults, mastering mistakes or provenance.
+High correlation can be intentional and negative correlation does not by itself prove a wiring defect or mono incompatibility. Treat results as evidence for listening and technical review.

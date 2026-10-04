@@ -1,0 +1,119 @@
+name: Publish shell-native v0.1 betas
+
+on:
+  push:
+    branches:
+      - feat/shell-native-audio-qc
+    paths:
+      - '.github/workflows/release-shell-native-v0.1.yml'
+      - 'release/v0.1-beta/**'
+
+permissions:
+  contents: write
+
+jobs:
+  qa-and-release:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg zip
+
+      - name: Verify runtimes
+        run: |
+          ffmpeg -version | head -n 1
+          ffprobe -version | head -n 1
+          pwsh --version
+          bash --version | head -n 1
+
+      - name: Bash syntax check
+        run: |
+          for f in bash/*.sh bash/lib/*.sh; do bash -n "$f"; done
+
+      - name: Run shell-native QA suite
+        run: python -m unittest discover -s tests -p 'test_shell_native_tools.py' -v
+
+      - name: Build individual Beta bundles
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools=(stereotruth loudwalk formattruth albumcontract phasewatch batchsilence transcodeaudit)
+          rm -rf release-dist
+          mkdir -p release-dist
+          for tool in "${tools[@]}"; do
+            root="release-dist/${tool}-v0.1-beta"
+            mkdir -p "$root/bash/lib" "$root/powershell/lib" "$root/spec"
+            cp "bash/${tool}.sh" "$root/bash/"
+            cp bash/lib/*.sh "$root/bash/lib/"
+            cp "powershell/${tool}.ps1" "$root/powershell/"
+            cp powershell/lib/*.ps1 "$root/powershell/lib/"
+            cp "spec/${tool}.md" "$root/spec/"
+            cp LICENSE "$root/"
+            cat > "$root/README.txt" <<EOF
+          ${tool} v0.1 Beta
+
+          Requires FFmpeg and FFprobe.
+          Bash: bash/${tool}.sh --help
+          PowerShell: powershell/${tool}.ps1 -Help
+
+          The tool reads source audio and produces reports only. See spec/${tool}.md for behavior, flags, exits, limitations, and examples.
+          EOF
+            (cd release-dist && zip -qr "${tool}-v0.1-beta.zip" "${tool}-v0.1-beta")
+          done
+
+      - name: Publish seven prereleases
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools=(stereotruth loudwalk formattruth albumcontract phasewatch batchsilence transcodeaudit)
+          for tool in "${tools[@]}"; do
+            case "$tool" in
+              stereotruth) summary='Stereo correlation, dual-mono, polarity and channel-imbalance review.' ;;
+              loudwalk) summary='Time-coded EBU R128 loudness walk with abrupt-change and median-deviation findings.' ;;
+              formattruth) summary='Container, codec, stream-layout and extension consistency inspection.' ;;
+              albumcontract) summary='Album/delivery-set technical contract and outlier audit.' ;;
+              phasewatch) summary='Timestamped stereo correlation ledger with critical-threshold and regime-change findings.' ;;
+              batchsilence) summary='Batch leading/trailing silence measurement and policy-threshold audit.' ;;
+              transcodeaudit) summary='Technical provenance triage without claiming to prove transcode history.' ;;
+            esac
+            tag="${tool}-v0.1-beta"
+            title="${tool} v0.1 Beta"
+            notes="release-dist/${tool}-notes.md"
+            cat > "$notes" <<EOF
+          # ${title}
+
+          ${summary}
+
+          This is a Beta release of the independent Bash and PowerShell implementations. Both use FFmpeg/FFprobe as low-level measurement primitives and do not call the repository's Python or JavaScript engines.
+
+          Requirements: FFmpeg + FFprobe; Bash 4.4+ for the Bash version; PowerShell 7+ for the PowerShell version.
+
+          The attached ZIP contains both implementations, their shared runtime helpers, the detailed tool specification, and the project license. Source audio is read-only. Exit status 0 means analysis completed without review findings, 1 means analysis completed with review findings, and 2 means the command could not complete because of input, dependency, or argument errors where the shell interface can control the exit code.
+
+          v0.1 QA removed draft CLI switches that were accepted but did not change behavior. Deferred controls are documented in the included specification and will only return when they have real analysis behavior and regression coverage.
+          EOF
+            asset="release-dist/${tool}-v0.1-beta.zip"
+            if gh release view "$tag" >/dev/null 2>&1; then
+              gh release upload "$tag" "$asset" --clobber
+              gh release edit "$tag" --title "$title" --notes-file "$notes" --prerelease --target "$GITHUB_SHA"
+            else
+              gh release create "$tag" "$asset" --title "$title" --notes-file "$notes" --prerelease --target "$GITHUB_SHA"
+            fi
+          done
+
+      - name: Verify published releases
+        shell: bash
+        run: |
+          set -euo pipefail
+          for tool in stereotruth loudwalk formattruth albumcontract phasewatch batchsilence transcodeaudit; do
+            gh release view "${tool}-v0.1-beta" --json tagName,name,isPrerelease,assets --jq '.tagName + " | " + .name + " | prerelease=" + (.isPrerelease|tostring) + " | assets=" + (.assets|length|tostring)'
+          done
