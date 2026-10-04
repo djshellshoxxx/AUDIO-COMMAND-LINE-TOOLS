@@ -8,7 +8,7 @@ EOF
 }
 json=0; output=""; input=""
 while (($#)); do case "$1" in --help|-h) help; exit 0;; --json) json=1;; --output) shift; (($#))||die 'missing --output value'; output=$1;; --*) die "unknown option: $1";; *) [[ -z "$input" ]]||die 'only one input is supported'; input=$1;; esac; shift; done
-[[ -n "$input" ]]||die 'input required'; require_tools; need_file "$input"
+[[ -n "$input" ]]||die 'input required'; require_tools; need_file "$input"; validate_report_target "$output" "$input"
 codec=$(probe_value "$input" codec_name); long=$(probe_value "$input" codec_long_name); rate=$(probe_value "$input" sample_rate); channels=$(probe_value "$input" channels); layout=$(probe_value "$input" channel_layout); sample_fmt=$(probe_value "$input" sample_fmt); bits=$(probe_value "$input" bits_per_raw_sample); [[ -n "$bits" ]]||bits=$(probe_value "$input" bits_per_sample); bitrate=$(probe_value "$input" bit_rate); duration=$(probe_value "$input" duration format); format=$(probe_value "$input" format_name format)
 streams=$(ffprobe -v error -show_entries stream=codec_type -of csv=p=0 -- "$input" 2>/dev/null || true); stream_count=$(printf '%s\n' "$streams"|sed '/^$/d'|wc -l|tr -d ' '); nona=$(printf '%s\n' "$streams"|grep -vc '^audio$' || true)
 ext=${input##*.}; ext=$(printf '%s' "$ext"|tr '[:upper:]' '[:lower:]'); mismatch=0
