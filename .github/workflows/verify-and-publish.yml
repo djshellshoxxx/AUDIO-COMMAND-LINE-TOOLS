@@ -57,8 +57,8 @@ jobs:
           ffmpeg -version | Select-Object -First 1
           ffprobe -version | Select-Object -First 1
           $PSVersionTable.PSVersion
-      - name: Run shell-native regression and parity tests
-        run: python -m unittest tests.test_shell_native_tools -v
+      - name: Run shell-native regression, adversarial and parity tests
+        run: python -m unittest tests.test_shell_native_tools tests.test_shell_native_adversarial -v
   browser:
     name: Browser workflows and responsive layout
     runs-on: ubuntu-latest
