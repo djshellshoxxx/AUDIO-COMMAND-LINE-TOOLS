@@ -8,7 +8,7 @@ EOF
 }
 json=0; jump=5; dev=6; output=""; input=""
 while (($#)); do case "$1" in --help|-h) help; exit 0;; --json) json=1;; --jump-db) shift; (($#))||die 'missing --jump-db value'; jump=$1;; --deviation-db) shift; (($#))||die 'missing --deviation-db value'; dev=$1;; --output) shift; (($#))||die 'missing --output value'; output=$1;; --*) die "unknown option: $1";; *) [[ -z "$input" ]]||die 'one input only'; input=$1;; esac; shift; done
-[[ -n "$input" ]]||die 'input required'; [[ $(json_num "$jump") != null ]]||die 'invalid --jump-db'; [[ $(json_num "$dev") != null ]]||die 'invalid --deviation-db'; awk -v x="$jump" 'BEGIN{exit !(x>=0)}'||die '--jump-db must be >= 0'; awk -v x="$dev" 'BEGIN{exit !(x>=0)}'||die '--deviation-db must be >= 0'; require_tools; need_file "$input"
+[[ -n "$input" ]]||die 'input required'; [[ $(json_num "$jump") != null ]]||die 'invalid --jump-db'; [[ $(json_num "$dev") != null ]]||die 'invalid --deviation-db'; awk -v x="$jump" 'BEGIN{exit !(x>=0)}'||die '--jump-db must be >= 0'; awk -v x="$dev" 'BEGIN{exit !(x>=0)}'||die '--deviation-db must be >= 0'; require_tools; need_file "$input"; validate_report_target "$output" "$input"
 log=$(LC_ALL=C ffmpeg -hide_banner -nostats -i "$input" -filter_complex ebur128=peak=true -f null - 2>&1 || true)
 mapfile -t pts < <(printf '%s\n' "$log"|awk '/Parsed_ebur128/ && / t: /{for(i=1;i<=NF;i++)if($i=="t:")t=$(i+1);for(i=1;i<=NF;i++)if($i=="S:"){s=$(i+1);gsub(/[^0-9+.-]/,"",s);if(s!=""&&s+0>-100)print t" "s}}')
 vals=(); for x in "${pts[@]}"; do vals+=("${x#* }"); done
