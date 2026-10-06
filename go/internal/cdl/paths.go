@@ -1,0 +1,6 @@
+package cdl
+
+import("fmt";"os";"path/filepath";"runtime";"strings")
+func CanonicalPath(path string)(string,error){abs,err:=filepath.Abs(path);if err!=nil{return "",err};if _,err:=os.Lstat(abs);err==nil{p,err:=filepath.EvalSymlinks(abs);if err!=nil{return "",err};return filepath.Clean(p),nil}else if !os.IsNotExist(err){return "",err};parent:=filepath.Dir(abs);if st,err:=os.Stat(parent);err!=nil||!st.IsDir(){return "",fmt.Errorf("report parent directory does not exist: %s",parent)};resolvedParent,err:=filepath.EvalSymlinks(parent);if err!=nil{return "",err};return filepath.Join(resolvedParent,filepath.Base(abs)),nil}
+func samePath(a,b string)bool{if runtime.GOOS=="windows"{return strings.EqualFold(a,b)};return a==b}
+func ValidateReportTarget(output string,sources []string)error{if output==""{return nil};if st,err:=os.Stat(output);err==nil&&st.IsDir(){return fmt.Errorf("report output is a directory: %s",output)};dest,err:=CanonicalPath(output);if err!=nil{return err};for _,source:=range sources{if source==""{continue};src,err:=CanonicalPath(source);if err!=nil{return fmt.Errorf("cannot resolve analyzed source %s: %w",source,err)};if samePath(dest,src){return fmt.Errorf("report output must not replace analyzed source: %s",output)}};return nil}

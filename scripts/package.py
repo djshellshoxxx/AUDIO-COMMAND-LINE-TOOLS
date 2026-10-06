@@ -18,8 +18,15 @@ def main():
     bundle('cdl-audio-python.zip',common+[(ROOT/'requirements.txt','requirements.txt')]+[(p,p.name) for p in (ROOT/'python').iterdir() if p.is_file()])
     bundle('cdl-audio-javascript.zip',common+[(p,p.name) for p in (ROOT/'site/js').glob('*.mjs')])
     powershell=ROOT/'powershell'
-    if powershell.exists():
-        bundle('cdl-winaudioforensics-powershell.zip',common+[(p,p.name) for p in powershell.iterdir() if p.is_file()])
+    waf=[p for p in (powershell/'WinAudioForensics.ps1',powershell/'WinAudioForensics.psm1') if p.exists()]
+    if waf:
+        bundle('cdl-winaudioforensics-powershell.zip',common+[(p,p.name) for p in waf])
+    bash=ROOT/'bash'
+    if bash.exists():
+        bundle('cdl-audio-bash.zip',common+[(p,p.relative_to(ROOT).as_posix()) for p in bash.rglob('*') if p.is_file()])
+    shell_ps=[p for p in powershell.rglob('*') if p.is_file() and not p.name.startswith('WinAudioForensics')]
+    if shell_ps:
+        bundle('cdl-audio-powershell.zip',common+[(p,p.relative_to(ROOT).as_posix()) for p in shell_ps])
     for folder in ('spec','docs'):
         target=ROOT/'site'/folder
         target.mkdir(exist_ok=True)
