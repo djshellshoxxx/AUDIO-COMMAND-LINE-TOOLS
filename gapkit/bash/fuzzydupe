@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# fuzzydupe - BATCH: find the same recording across different formats, bitrates, gain and leading silence
+# (mp3 vs flac vs wav re-encodes), which byte/hash duplicate finders miss.
+# Pipeline: find | xargs -P (parallel ffmpeg decode, silence-trim, 5.5 kHz mono) | od | awk (energy+ZCR contour
+#           fingerprint per file) | sort | awk (duration-bucketed pairwise similarity with offset search)
+# usage: fuzzydupe [-s similarity 0..1] [-j jobs] DIR      output: TSV  similarity<TAB>fileA<TAB>fileB
+set -euo pipefail
+sim=0.85; jobs=$(nproc 2>/dev/null || echo 2)
+while getopts "s:j:" o; do case $o in s) sim=$OPTARG;; j) jobs=$OPTARG;; *) exit 2;; esac; done; shift $((OPTIND-1))
+[ $# -eq 1 ] && [ -d "$1" ] || { echo "usage: fuzzydupe [-s 0.85] [-j N] DIR" >&2; exit 2; }
+fp() { # one line per file: duration<TAB>fingerprint<TAB>path
+  ffmpeg -nostdin -v error -i "$1" -t 90 -af "silenceremove=start_periods=1:start_threshold=-50dB" -ac 1 -ar 5512 -f s16le - 2>/dev/null \
+  | od -An -v -td2 -w2 | awk -v f="$1" '
+    # 256-sample hops, 1024-sample overlapping windows -> contour is insensitive to sub-frame alignment
+    { s = $1; e += s * s; if ((s >= 0) != (ps >= 0)) z++; ps = s
+      if (++k == 256) { he[n] = e; hz[n] = z; e = z = k = 0
+        if (n >= 3) { E[n] = he[n] + he[n-1] + he[n-2] + he[n-3]; Z[n] = hz[n] + hz[n-1] + hz[n-2] + hz[n-3] }; n++ } }
+    function tr(x, y, k) { return x > y * k ? 2 : (x * k < y ? 0 : 1) }
+    END { if (n < 8) exit; out = ""
+          # 9-symbol alphabet: energy and zero-crossing trend each up/flat/down (dead zone stops coin-flip bits)
+          for (i = 4; i < n; i++) out = out (tr(E[i], E[i-1], 1.12) * 3 + tr(Z[i], Z[i-1], 1.08))
+          printf "%.2f\t%s\t%s\n", NR / 5512, out, f }'
+}
+export -f fp
+find "$1" -type f \( -iname '*.wav' -o -iname '*.mp3' -o -iname '*.flac' -o -iname '*.ogg' -o -iname '*.m4a' -o -iname '*.aif*' -o -iname '*.opus' \) -print0 \
+ | xargs -0 -r -P "$jobs" -I{} bash -c 'fp "$1"' _ {} \
+ | sort -t$'\t' -k1,1n \
+ | awk -F'\t' -v sim="$sim" '
+   { d[NR] = $1; p[NR] = $3; L[NR] = split($2, c, ""); for (i = 1; i <= L[NR]; i++) F[NR, i] = c[i] }
+   END {
+     for (a = 1; a <= NR; a++) for (b = a + 1; b <= NR; b++) {
+       if (d[b] - d[a] > 2 + d[a] * 0.05) break           # sorted by duration: stop early
+       best = 0
+       for (off = -16; off <= 16; off++) {
+         m = t = 0
+         for (i = 1; i <= L[a]; i++) { j = i + off; if (j < 1 || j > L[b]) continue; x = F[a, i]; y = F[b, j]
+           if (x == 4 && y == 4) continue                    # both steady: carries no identity, skip
+           t++
+           de = int(x / 3) - int(y / 3); dz = x % 3 - y % 3; m += 1 - ((de < 0 ? -de : de) + (dz < 0 ? -dz : dz)) / 4 }
+         if (t > 20 && m / t > best) best = m / t
+       }
+       if (best >= sim) { printf "%.3f\t%s\t%s\n", best, p[a], p[b]; hits++ }
+     }
+     printf "# %d files fingerprinted, %d probable duplicate pair(s)\n", NR, hits + 0 > "/dev/stderr"
+   }' | sort -rn
