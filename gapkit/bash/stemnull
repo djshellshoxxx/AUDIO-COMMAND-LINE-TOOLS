@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# stemnull - prove that a set of stems sums back to the stereo master (null test), and show WHERE it fails.
+# Pipeline: ffprobe (master format) | ffmpeg (sum stems, invert master, 1 s astats windows) | awk (ranges + verdict)
+# usage: stemnull [-t threshold_dBFS] [-o residual.wav] MASTER STEM [STEM...]
+# exit: 0 = nulls (residual peak <= threshold), 1 = does not null, 2 = usage/error
+set -euo pipefail
+thr=-60; out=""
+while getopts "t:o:" o; do case $o in t) thr=$OPTARG;; o) out=$OPTARG;; *) exit 2;; esac; done; shift $((OPTIND-1))
+[ $# -ge 2 ] || { echo "usage: stemnull [-t dBFS] [-o residual.wav] MASTER STEM [STEM...]" >&2; exit 2; }
+for f in "$@"; do [ -f "$f" ] || { echo "missing: $f" >&2; exit 2; }; done
+IFS=, read -r sr ch < <(ffprobe -v error -select_streams a:0 -show_entries stream=sample_rate,channels -of csv=p=0 "$1")
+fmt="aformat=sample_fmts=dbl:sample_rates=$sr:channel_layouts=$([ "$ch" = 1 ] && echo mono || echo stereo)"
+args=(); fc=""; i=0
+for f in "$@"; do args+=(-i "$f"); fc+="[$i:a]$fmt[a$i];"; i=$((i+1)); done
+n=$(( $# - 1 )); sum=""; for ((k=1;k<=n;k++)); do sum+="[a$k]"; done
+if [ "$n" -eq 1 ]; then fc+="${sum}anull[s];"; else fc+="${sum}amix=inputs=$n:normalize=0:duration=longest[s];"; fi
+fc+="[a0]volume=-1[m];[s][m]amix=inputs=2:normalize=0:duration=longest,asplit[r1][r2];"
+fc+="[r1]asetnsamples=n=$sr,astats=metadata=1:reset=1,ametadata=mode=print:file=/dev/stdout,anullsink"
+outargs=(-map "[r2]" -c:a pcm_f32le -y "${out:-/dev/null}"); [ -n "$out" ] || outargs=(-map "[r2]" -f null -)
+ffmpeg -nostdin -v error "${args[@]}" -filter_complex "$fc" "${outargs[@]}" \
+ | awk -v thr="$thr" -F'[=: ]+' '
+  /^frame/ { for (i = 1; i <= NF; i++) if ($i == "pts_time") t = $(i + 1); next }
+  /Overall.Peak_level/ { p = ($2 == "-inf") ? -200 : $2 + 0; if (p > maxp) maxp = p; if (!seen++) maxp = p
+     if (p > thr) { if (!open) { open = 1; st = t; wp = -200 } ; en = t + 1; if (p > wp) wp = p }
+     else if (open) { printf "  FAIL %8.1fs - %8.1fs  worst %.1f dBFS\n", st, en, wp; open = 0; wp = -200; bad++ } }
+  /Overall.RMS_level/ { r = ($2 == "-inf") ? -200 : $2 + 0; e += 10 ^ (r / 10); w++ }
+  END { if (open) { printf "  FAIL %8.1fs - %8.1fs  worst %.1f dBFS\n", st, en, wp; bad++ }
+        rms = w && e > 0 ? 10 * log(e / w) / log(10) : -200
+        printf "residual peak %.1f dBFS | residual RMS %.1f dBFS | threshold %s dBFS | windows %d\n", maxp, rms, thr, w
+        if (bad) { print "VERDICT: stems do NOT null against master (" bad " failing region(s))"; exit 1 }
+        print "VERDICT: stems null against master" }'
