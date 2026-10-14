@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# termwave - draw a colour loudness waveform of ANY audio file right in the terminal.
+# Built for headless servers / SSH / PuTTY where you cannot open a GUI editor.
+# Pipeline: ffprobe (duration) | ffmpeg (decode 8 kHz mono s16) | od (to integers) | awk (bucket + draw)
+# usage: termwave FILE [columns] [half-height]     env: NO_COLOR=1 disables colour
+set -euo pipefail
+[ $# -ge 1 ] && [ -f "$1" ] || { echo "usage: termwave FILE [columns] [half-height]" >&2; exit 2; }
+f=$1
+cols=${2:-$(( $(tput cols 2>/dev/null || echo 80) - 2 ))}; h=${3:-6}
+color=1; { [ -n "${NO_COLOR:-}" ] || [ ! -t 1 ]; } && color=0
+dur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$f")
+ffmpeg -nostdin -v error -i "$f" -ac 1 -ar 8000 -f s16le - \
+ | od -An -v -td2 -w2 \
+ | awk -v cols="$cols" -v h="$h" -v dur="$dur" -v color="$color" -v name="${f##*/}" '
+  BEGIN { spc = dur * 8000 / cols; if (spc < 1) spc = 1 }
+  { s = $1 < 0 ? -$1 : $1; c = int(NR / spc); if (c >= cols) c = cols - 1
+    if (s > pk[c]) pk[c] = s; ss[c] += $1 * $1; n[c]++; if (s > gp) gp = s; if (s >= 32767) clip++ }
+  function db(x) { return x > 0 ? 20 * log(x / 32768) / log(10) : -96 }
+  END {
+    if (!NR) { print "no audio decoded"; exit 1 }
+    for (c = 0; c < cols; c++) {
+      d = db(pk[c]); hh[c] = (d + 60) / 60 * h; if (hh[c] < 0) hh[c] = 0
+      r = n[c] ? db(sqrt(ss[c] / n[c])) : -96
+      col[c] = !color ? "" : (pk[c] >= 32767 ? "\033[41;97m" : r > -9 ? "\033[31m" : r > -18 ? "\033[33m" : "\033[32m")
+    }
+    rst = color ? "\033[0m" : ""
+    printf "%s  %.1fs  peak %.1f dBFS  clipped samples %d\n", name, dur, db(gp), clip
+    for (r = h; r >= -h; r--) {
+      line = ""
+      for (c = 0; c < cols; c++) {
+        a = r < 0 ? -r : r
+        ch = (r == 0) ? "-" : (hh[c] >= a ? "#" : (hh[c] >= a - 0.5 ? (r > 0 ? "." : "'"'"'") : " "))
+        line = line col[c] ch rst
+      }
+      print line
+    }
+    axis = ""; for (c = 0; c < cols; c += 10) { t = sprintf("|%-9s", sprintf("%dm%02ds", int(c * dur / cols / 60), int(c * dur / cols) % 60)); axis = axis t }
+    print substr(axis, 1, cols)
+    if (color) print "\033[32mquiet\033[0m \033[33mmoderate\033[0m \033[31mloud (RMS>-9 dBFS)\033[0m \033[41;97mclipping\033[0m  (height = peak dBFS, -60..0)"
+  }'
