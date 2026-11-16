@@ -139,6 +139,10 @@ The original ten tools support little-endian RIFF WAV PCM 8/16/24/32-bit and IEE
 
 Measurements and findings are evidence to inspect, not automatic diagnoses. `transcodeaudit` cannot prove lossy-to-lossless history. Correlation does not prove a wiring fault or mastering error. WinAudioForensics reports state change/correlation rather than claiming causality.
 
+## Wiki
+
+Wiki source pages are in [docs/wiki/](docs/wiki/Home.md): user guide, developer guide, architecture rationale and codebase map.
+
 ## Downloads
 
 `scripts/package.py` builds reproducible bundles for the Python tools, JavaScript tools, WinAudioForensics, Bash QC tools, and PowerShell QC tools:
