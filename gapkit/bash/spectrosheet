@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# spectrosheet - BATCH: one PNG "contact sheet" showing the spectrogram of every file in a folder, labelled
+# with name, duration, integrated LUFS and true peak. Spot lossy cut-offs, hum, clicks, silence at a glance.
+# Pipeline: find | sort | numbering loop | xargs -P (ffmpeg ebur128 measure | awk label; ffmpeg showspectrumpic+drawtext tile)
+#           | ffmpeg tile filter -> one sheet
+# usage: spectrosheet [-c columns] [-j jobs] DIR OUT.png
+set -euo pipefail
+cols=4; jobs=$(nproc 2>/dev/null || echo 2)
+while getopts "c:j:" o; do case $o in c) cols=$OPTARG;; j) jobs=$OPTARG;; *) exit 2;; esac; done; shift $((OPTIND-1))
+[ $# -eq 2 ] && [ -d "$1" ] || { echo "usage: spectrosheet [-c 4] [-j N] DIR OUT.png" >&2; exit 2; }
+tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT; export tmp
+cell() { # $1=index $2=file
+  ffmpeg -nostdin -v info -i "$2" -af ebur128=peak=true -f null - 2>&1 \
+   | awk -v n="${2##*/}" '/I:/{i=$2} /Peak:/{p=$2} END{printf "%s\n%s LUFS  TP %s dBTP", substr(n,1,48), i, p}' > "$tmp/$1.txt"
+  d=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$2" | awk '{printf "%dm%02ds", $1/60, $1%60}')
+  printf "  %s" "$d" >> "$tmp/$1.txt"
+  ffmpeg -nostdin -v error -i "$2" -lavfi "showspectrumpic=s=400x150:legend=0:scale=log,pad=400:200:0:50:black,drawtext=textfile=$tmp/$1.txt:fontcolor=white:fontsize=13:x=6:y=6" -frames:v 1 -y "$tmp/$1.png"
+}
+export -f cell
+find "$1" -type f \( -iname '*.wav' -o -iname '*.mp3' -o -iname '*.flac' -o -iname '*.ogg' -o -iname '*.m4a' -o -iname '*.aif*' \) -print0 \
+ | sort -z | { i=0; while IFS= read -r -d '' f; do i=$((i+1)); printf '%04d\0%s\0' "$i" "$f"; done; } \
+ | xargs -0 -r -n2 -P "$jobs" bash -c 'cell "$1" "$2"' _
+count=$(ls "$tmp"/*.png 2>/dev/null | wc -l); [ "$count" -gt 0 ] || { echo "no audio found" >&2; exit 1; }
+rows=$(( (count + cols - 1) / cols ))
+ffmpeg -nostdin -v error -framerate 1 -pattern_type glob -i "$tmp/*.png" -vf "tile=${cols}x${rows}:padding=4:color=gray" -frames:v 1 -y "$2"
+echo "$2: $count file(s) in a ${cols}x${rows} sheet"

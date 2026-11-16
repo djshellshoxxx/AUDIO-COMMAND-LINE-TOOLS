@@ -87,6 +87,10 @@ winget install Gyan.FFmpeg
 
 Shell-native exit codes are **0** = completed without policy findings, **1** = completed with review findings, **2** = invalid arguments/dependency/input/analysis/report failure. Source audio is read-only. Findings are evidence to inspect rather than automatic claims of corruption, mastering error or encoding history.
 
+## gapkit: 17 workflow-gap tools in 12 languages
+
+[gapkit/](gapkit/README.md) holds 17 standalone tools for jobs that have no free command-line tool. They are written as Bash pipelines and in Tcl, Lua, GNU awk, Windows batch, PHP, Node.js, Perl, JRuby, VBScript, x86-64 assembly and ARM64 assembly. Examples include an in-terminal waveform, a stem-vs-master null test, cross-format duplicate detection, auto loop points written to the `smpl` chunk, pure-PHP waveform peaks and BPM detection, crash-damaged WAV header repair, and raw-PCM-to-WAV for the Raspberry Pi. Run `bash gapkit/test.sh` to check them all.
+
 ## Install Python tools
 
 Python 3.10+ and NumPy:
